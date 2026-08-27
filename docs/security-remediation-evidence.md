@@ -24,3 +24,5 @@ The final `pnpm audit --prod --json` result is clean: **0 critical, 0 high, 0 mo
 ## Regression evidence
 
 After remediation, lint, strict TypeScript checking, the complete **8-file / 28-test** suite, production build, and the live seven-scenario CognoDB verification all passed. The seeded Playwright workflow also passed both browser tests. The live evidence integration test changes current policy text and removes the policy’s current `TARGETS` edge before reading the historical record; its immutable explanation snapshot remains unchanged, and the test restores the graph state before it completes.
+
+The final remediation commit `3f800da` was authored with the configured `Shaik Sohel <shaiksohelll05@gmail.com>` identity. GitHub Actions Quality Gate run `33102363518` then passed dependency installation from the lockfile, lint, strict type-checking, Vitest, and production build.

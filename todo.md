@@ -41,4 +41,4 @@
 - [x] Run the remaining assignment-level graph, quality, browser, security, and delivery checks; document pre-deployment issues without adding features.
 - [x] Remediate critical and high production dependency advisories through minimal compatible upgrades, then prove the post-remediation audit result.
 - [x] Persist an immutable deterministic explanation-path snapshot with decision evidence and prove it survives later graph changes.
-- [ ] Commit the remediations with the configured user identity and verify the final GitHub Actions quality gate without deploying.
+- [x] Commit the remediations with the configured user identity and verify the final GitHub Actions quality gate without deploying.

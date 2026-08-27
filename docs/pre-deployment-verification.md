@@ -9,7 +9,7 @@
 
 | Check | Evidence-backed result |
 |---|---|
-| Current delivery state | The private GitHub delivery branch is clean before the remediation commit. Prior CI passed, and the final remediation commit is required to pass the same quality gate before handoff. |
+| Current delivery state | Remediation commit `3f800da` is on the private GitHub delivery branch. Its GitHub Actions Quality Gate run `33102363518` passed frozen-lockfile installation, lint, strict type-checking, Vitest, and production build. |
 | Live graph scenarios | `pnpm graph:verify` passed. It applied repeatable schema/seed operations and returned the expected verdicts for `ALLOWED`, `BLOCKED_POLICY`, `APPROVAL_REQUIRED`, `UNAUTHORIZED_AGENT`, `UNVERIFIED_CUSTOMER`, `MISSING_APPROVER`, and `NO_APPLICABLE_POLICY`. |
 | Deterministic/application tests | The final local gate passed all **8 Vitest files / 28 tests**, including the live provider-default CognoDB session and immutable explanation snapshot assertions. |
 | Browser journey | `VERIDEX_E2E_BASE_URL=http://localhost:3000 pnpm test:e2e` passed **2 Playwright tests**, including evaluate → explain → approve → audit and visible safe query-failure states. |
