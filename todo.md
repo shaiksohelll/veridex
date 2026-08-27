@@ -11,5 +11,29 @@
 - [x] Implement an idempotent seed process for realistic authorization, policy, approval, and evidence context.
 - [x] Verify the seven required scenarios against the actual graph without relying on record counts.
 - [x] Document frozen Phase 1 rules and record lint, type-check, test, and production-build results before Phase 2.
-- [ ] Build server-only graph repository functions that return normalized authorization, context, policy, and approver facts.
-- [ ] Implement the reusable pure deterministic evaluator with stable verdicts, reason codes, policy precedence, and one-resource validation.
+- [x] Build server-only graph repository functions that return normalized authorization, context, policy, and approver facts.
+- [x] Implement the reusable pure deterministic evaluator with stable verdicts, reason codes, policy precedence, and one-resource validation.
+- [x] Unit-test allowed, blocked, approval-required, default-deny, deterministic tie-breaking, amount bounds, unauthorized, inactive-agent, unverified-customer, missing-approver, invalid-input, and one-resource behavior.
+- [x] Add validated public tRPC procedures for demo metadata, create-and-evaluate, explanation, approval queue, approval decision, and audit evidence.
+- [x] Map validation, not-found, conflict, and database-unavailable failures to safe structured API responses.
+- [x] Add public demo-metadata, create-and-evaluate, and explanation procedures backed by graph-derived facts and the pure evaluator.
+- [x] Validate malformed input before database access and map not-found and database/configuration failures to safe responses without exposing raw errors.
+- [x] Design and build the tactile evaluation, explanation, approval, and evidence interface with complete operation states.
+- [x] Persist approval-required results as `PENDING` Approval nodes with assigned roles and append a decision evidence record in the same write transaction.
+- [x] Implement `PENDING → APPROVED/REJECTED` via an eligible active demo user, reject duplicate terminal transitions, and append a separate approval evidence record.
+- [x] Prove live API approval behavior, append-only evidence ordering, duplicate-transition rejection, and concurrent terminal-attempt safety.
+- [x] Map all Veridex validation failures to sanitized API messages without exposing Zod schema internals or regex patterns.
+- [x] Add API tests for safe invalid evaluate, explain/evidence, and approval-decision validation responses.
+- [x] Verify the visible browser journey: evaluate approval-required action, show relationship path, approve with an eligible demo user, and display appended audit evidence.
+- [x] Show persisted append-only evidence in the UI for allowed and blocked decisions as well as approval-required decisions.
+- [x] Load persisted approval and evidence state from the Veridex APIs with explicit loading, empty, and error handling.
+- [x] Add a neutral pre-evaluation governance state distinct from a decision that does not require approval.
+- [x] Render an explicit explanation-query error state rather than silently retaining stale decision details.
+- [ ] Test initial governance emptiness and safe explanation/evidence loading failure states.
+- [x] Add and run a reproducible Playwright browser test for the evaluate, explain, approve, and audit journey against a seeded server.
+- [x] Test initial governance emptiness and safe explanation/evidence loading failure states.
+- [x] Finalize README coverage for architecture, graph model, setup, security, testing, deployment posture, and limitations.
+- [x] Perform a hostile implementation review of deterministic decisions, parameterized graph access, approval safety, evidence immutability, and repository hygiene.
+- [ ] Run the final local quality gate and seeded-browser journey, then save and push the delivery checkpoint.
+- [ ] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.
+- [x] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.

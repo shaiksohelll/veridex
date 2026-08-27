@@ -48,6 +48,10 @@ pids
 coverage/
 *.lcov
 
+# Playwright execution artifacts
+test-results/
+playwright-report/
+
 # nyc test coverage
 .nyc_output
 

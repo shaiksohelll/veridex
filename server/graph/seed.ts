@@ -2,7 +2,7 @@ import type { Driver, ManagedTransaction } from "neo4j-driver";
 import { parseCognoDbConfig } from "../cognodb/config";
 import { NODE_LABELS, RELATIONSHIP_TYPES, type NodeLabel, type RelationshipType } from "./schema";
 
-type SeedProperties = Record<string, boolean | number | string | null>;
+type SeedProperties = Record<string, boolean | number | string | string[] | null>;
 
 type RelationshipSeed = {
   cypher: string;
@@ -207,13 +207,18 @@ const SEEDED_NODES: Record<NodeLabel, ReadonlyArray<SeedProperties>> = {
   Evidence: [
     {
       actionRequestId: "request-historical-approved-refund",
+      actionTypeId: "action-issue-refund",
       agentId: "agent-billing-assistant",
+      amount: 750,
+      approvalDecision: "APPROVED",
       createdAt: "2026-08-27T00:05:00.000Z",
+      customerId: "customer-acme",
       eventType: "APPROVAL_DECIDED",
       evidenceId: "evidence-historical-refund-approval",
       policyId: "policy-approval-enterprise-refund",
       policyVersion: 1,
       reasonCode: "APPROVAL_GRANTED",
+      reasons: ["Historical finance approval retained for evidence demonstration."],
       resourceId: "resource-invoice-1844",
       verdict: "ALLOWED",
     },
