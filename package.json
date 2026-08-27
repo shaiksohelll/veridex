@@ -11,6 +11,9 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
+    "graph:schema": "tsx scripts/apply-graph-schema.ts",
+    "graph:seed": "tsx scripts/seed-graph.ts",
+    "graph:verify": "tsx scripts/verify-phase1.ts",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {
@@ -63,6 +66,7 @@
     "lucide-react": "^0.453.0",
     "mysql2": "^3.15.0",
     "nanoid": "^5.1.5",
+    "neo4j-driver": "^6.2.0",
     "next-themes": "^0.4.6",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.1",
