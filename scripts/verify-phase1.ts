@@ -44,8 +44,7 @@ function evaluateVerificationFacts(facts: ScenarioFacts): Verdict {
 }
 
 async function verifySchemaCoverage(driver: Driver): Promise<void> {
-  const config = (await import("../server/cognodb/config")).parseCognoDbConfig();
-  const session = driver.session(config.database ? { database: config.database } : undefined);
+  const session = driver.session();
 
   try {
     for (const label of NODE_LABELS) {
@@ -67,8 +66,7 @@ async function verifySchemaCoverage(driver: Driver): Promise<void> {
 }
 
 async function loadScenarioFacts(driver: Driver, scenarioKey: RequiredScenarioKey): Promise<ScenarioFacts> {
-  const config = (await import("../server/cognodb/config")).parseCognoDbConfig();
-  const session = driver.session(config.database ? { database: config.database } : undefined);
+  const session = driver.session();
 
   try {
     const requestResult = await session.run(

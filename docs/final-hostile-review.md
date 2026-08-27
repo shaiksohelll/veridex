@@ -22,7 +22,7 @@
 | Evidence immutability | There is no application update or delete operation for `Evidence`. Decision evidence is created in the same transaction as the approval when needed; approval evidence is created in the terminal-transition transaction. Seed evidence uses create-only merge behavior. | Pass |
 | Evidence snapshot | Newly generated decision evidence persists action request, action type, amount, customer, resource, policy/version, reason code/reasons, verdict, and timestamp. A live router integration test asserts the snapshot fields. | Pass |
 | Safe public errors | Shared tRPC formatting replaces malformed-input details with a generic message and removes stack metadata. Router tests assert that Zod and regex details are absent. Database errors are mapped to safe service responses. | Pass |
-| Secret boundary | `server/cognodb/config.ts` reads `COGNODB_URI`, `COGNODB_USERNAME`, `COGNODB_PASSWORD`, and optional database name from `process.env` only. A client-source audit found no `COGNODB`, `neo4j-driver`, or CognoDB configuration references under `client/`. The driver remains server-only. | Pass |
+| Secret boundary | `server/cognodb/config.ts` reads only the standard `COGNODB_URI`, `COGNODB_USERNAME`, and `COGNODB_PASSWORD` Bolt settings from `process.env`. Veridex does not read `COGNODB_DATABASE`; every graph session uses `driver.session()` without a database option, delegating selection to CognoDB/the driver rather than guessing. A client-source audit found no `COGNODB`, `neo4j-driver`, or CognoDB configuration references under `client/`. The driver remains server-only. | Pass |
 | Secret-file hygiene | `.gitignore` excludes `.env` and `.env.*`; the managed project secret mechanism supplies the live credentials. The platform restricts direct environment-file creation, so the placeholder-only example contract is documented in `README.md` rather than fabricating a secret file. | Pass with documented platform limitation |
 | Browser behavior | The reproducible Playwright suite verifies the neutral initial state, approval-required evaluation, real relationship path, approval by an eligible demo user, terminal state, appended evidence, and visible explanation/evidence refresh failures. | Pass |
 | Repository hygiene | Repository remotes include the private GitHub delivery remote. The local author identity is `Shaik Sohel <shaiksohelll05@gmail.com>`. `.gitignore` excludes environment files, builds, logs, coverage, and Playwright test artifacts. `git diff --check` reports no whitespace errors. | Pass pending final commit |
@@ -44,7 +44,7 @@
 | `pnpm graph:verify` | Pass: schema applied, seed run twice, all seven required scenarios returned expected verdicts. |
 | `pnpm lint` | Pass with zero warnings. |
 | `pnpm check` | Pass in TypeScript strict mode. |
-| `pnpm test` | Pass: 8 files / 25 tests, including live credential-gated CognoDB integration. |
+| `pnpm test` | Pass: 8 files / 27 tests, including live credential-gated CognoDB integration and a provider-default database session assertion. |
 | `pnpm build` | Pass; Vite reports a non-blocking client bundle-size advisory. |
 | `VERIDEX_E2E_BASE_URL=http://localhost:3000 pnpm test:e2e` | Pass: 2 browser tests. |
 | GitHub Actions quality gate | Configured to run frozen-lockfile install, lint, type-check, Vitest, and production build on pushes and pull requests. |

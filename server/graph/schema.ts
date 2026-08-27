@@ -1,6 +1,4 @@
 import type { Driver } from "neo4j-driver";
-import { parseCognoDbConfig } from "../cognodb/config";
-
 export const NODE_LABELS = [
   "Agent",
   "User",
@@ -73,8 +71,7 @@ export function assertFrozenGraphDefinition(): void {
 
 export async function applyGraphSchema(driver: Driver): Promise<void> {
   assertFrozenGraphDefinition();
-  const config = parseCognoDbConfig();
-  const session = driver.session(config.database ? { database: config.database } : undefined);
+  const session = driver.session();
 
   try {
     for (const statement of SCHEMA_STATEMENTS) {

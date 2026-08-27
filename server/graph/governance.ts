@@ -1,7 +1,6 @@
 import { customAlphabet } from "nanoid";
 import type { Driver, Record as Neo4jRecord } from "neo4j-driver";
 import type { DecisionResult } from "../decision/evaluator";
-import { parseCognoDbConfig } from "../cognodb/config";
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -54,8 +53,7 @@ function get<T>(record: Neo4jRecord, key: string): T {
   return record.get(key) as T;
 }
 function sessionFor(driver: Driver) {
-  const { database } = parseCognoDbConfig();
-  return driver.session(database ? { database } : undefined);
+  return driver.session();
 }
 const createGraphId = customAlphabet(
   "0123456789abcdefghijklmnopqrstuvwxyz",

@@ -152,8 +152,9 @@ All values are server-side secrets. Do not commit a real `.env` file or expose a
 | `COGNODB_URI` | Yes | CognoDB Neo4j-compatible Bolt URI. |
 | `COGNODB_USERNAME` | Yes | CognoDB database username. |
 | `COGNODB_PASSWORD` | Yes | CognoDB database password. |
-| `COGNODB_DATABASE` | No | Explicit database selection; omit for the provider default. |
 | `VERIDEX_E2E_BASE_URL` | Only for E2E | Base URL of a running, seeded Veridex server for browser tests. |
+
+`COGNODB_DATABASE` is intentionally not part of Veridex’s required Bolt contract. Every application, schema, seed, and verification session calls `driver.session()` with no database option, so CognoDB/the driver selects the provider default. The application never guesses or hard-codes a database name.
 
 The `.gitignore` excludes `.env` and `.env.*`. The required variable contract is documented here because the managed project environment restricts direct creation of environment files; any `.env.example` outside that environment must contain placeholders only.
 
@@ -186,7 +187,7 @@ Evaluate approval-required request
 
 It also verifies the neutral pre-evaluation state plus visible safe errors when explanation or evidence refreshes fail. The test is intentionally opt-in because it needs a running server with reachable CognoDB rather than fake client data.
 
-The final local verification run completed with **8 Vitest files / 24 tests passing**, lint passing, strict type-checking passing, and the production build succeeding. The Playwright suite completed with **2 tests passing** against the seeded local server. GitHub Actions runs installation from the lockfile followed by lint, type-check, Vitest, and the production build on `main` pushes and pull requests.
+The final local verification run completed with **8 Vitest files / 27 tests passing**, including a live provider-default CognoDB database assertion, plus lint passing, strict type-checking passing, graph verification passing, and the production build succeeding. The Playwright suite previously completed with **2 tests passing** against the seeded local server; no browser code changed in the database-selection correction. GitHub Actions runs installation from the lockfile followed by lint, type-check, Vitest, and the production build on `main` pushes and pull requests.
 
 ## Security and operational posture
 

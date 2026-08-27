@@ -1,5 +1,4 @@
 import type { Driver, ManagedTransaction } from "neo4j-driver";
-import { parseCognoDbConfig } from "../cognodb/config";
 import { NODE_LABELS, RELATIONSHIP_TYPES, type NodeLabel, type RelationshipType } from "./schema";
 
 type SeedProperties = Record<string, boolean | number | string | string[] | null>;
@@ -416,8 +415,7 @@ async function runSeedTransaction(transaction: ManagedTransaction): Promise<void
 }
 
 export async function seedGraph(driver: Driver): Promise<void> {
-  const config = parseCognoDbConfig();
-  const session = driver.session(config.database ? { database: config.database } : undefined);
+  const session = driver.session();
 
   try {
     await session.executeWrite(runSeedTransaction);

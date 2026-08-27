@@ -1,6 +1,4 @@
 import type { Driver, Record as Neo4jRecord } from "neo4j-driver";
-import { parseCognoDbConfig } from "../cognodb/config";
-
 export type GraphEntity = {
   id: string;
   label: string;
@@ -76,8 +74,7 @@ function get<T>(record: Neo4jRecord, key: string): T {
 }
 
 function driverSession(driver: Driver) {
-  const { database } = parseCognoDbConfig();
-  return driver.session(database ? { database } : undefined);
+  return driver.session();
 }
 
 function graphEntity(

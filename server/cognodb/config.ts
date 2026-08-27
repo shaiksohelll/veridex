@@ -2,7 +2,6 @@ export type CognoDbConfig = {
   uri: string;
   username: string;
   password: string;
-  database?: string;
 };
 
 type Environment = Record<string, string | undefined>;
@@ -53,6 +52,5 @@ export function parseCognoDbConfig(environment: Environment = process.env): Cogn
     uri,
     username: environment.COGNODB_USERNAME?.trim() || "cognodb",
     password: requiredValue(environment, "COGNODB_PASSWORD"),
-    database: environment.COGNODB_DATABASE?.trim() || undefined,
   };
 }
