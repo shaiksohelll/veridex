@@ -38,3 +38,4 @@
 - [x] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.
 - [x] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.
 - [x] Treat absent or blank `COGNODB_DATABASE` as provider-default database selection; validate against the live CognoDB connection and document the behavior.
+- [x] Run the remaining assignment-level graph, quality, browser, security, and delivery checks; document pre-deployment issues without adding features.
