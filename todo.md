@@ -6,7 +6,7 @@
 - [x] Verify the local quality commands and GitHub workflow configuration before beginning Phase 1 foundation work.
 - [x] Establish strict TypeScript, server-only CognoDB driver configuration, graph schema, idempotent seed data, and seeded-scenario verification in Phase 1.
 - [x] Add the official Neo4j-compatible JavaScript driver and server-only validated CognoDB environment boundary.
-- [ ] Add a committed root `.env.example` placeholder if the managed environment permits environment-file creation; the required variable contract is documented in README.md meanwhile.
+- [x] Add a committed root `.env.example` placeholder if the managed environment permits environment-file creation; the managed environment does not permit direct environment-file creation, so the placeholder-only variable contract is documented in README.md and live values remain in managed secrets.
 - [x] Define repeatable constraints and indexes for the frozen 12-label, 16-relationship CognoDB schema.
 - [x] Implement an idempotent seed process for realistic authorization, policy, approval, and evidence context.
 - [x] Verify the seven required scenarios against the actual graph without relying on record counts.
@@ -34,6 +34,6 @@
 - [x] Test initial governance emptiness and safe explanation/evidence loading failure states.
 - [x] Finalize README coverage for architecture, graph model, setup, security, testing, deployment posture, and limitations.
 - [x] Perform a hostile implementation review of deterministic decisions, parameterized graph access, approval safety, evidence immutability, and repository hygiene.
-- [ ] Run the final local quality gate and seeded-browser journey, then save and push the delivery checkpoint.
+- [x] Run the final local quality gate and seeded-browser journey, then save and push the delivery checkpoint.
 - [x] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.
 - [x] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.
