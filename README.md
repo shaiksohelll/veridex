@@ -187,13 +187,13 @@ Evaluate approval-required request
 
 It also verifies the neutral pre-evaluation state plus visible safe errors when explanation or evidence refreshes fail. The test is intentionally opt-in because it needs a running server with reachable CognoDB rather than fake client data.
 
-The final local verification run completed with **8 Vitest files / 27 tests passing**, including a live provider-default CognoDB database assertion, plus lint passing, strict type-checking passing, graph verification passing, and the production build succeeding. The Playwright suite previously completed with **2 tests passing** against the seeded local server; no browser code changed in the database-selection correction. GitHub Actions runs installation from the lockfile followed by lint, type-check, Vitest, and the production build on `main` pushes and pull requests.
+The final local verification run completed with **8 Vitest files / 28 tests passing**, including live provider-default CognoDB and immutable-explanation snapshot assertions, plus lint passing, strict type-checking passing, graph verification passing, a clean production dependency audit, and the production build succeeding. The Playwright suite completed with **2 tests passing** against the seeded local server. GitHub Actions runs installation from the lockfile followed by lint, type-check, Vitest, and the production build on `main` pushes and pull requests.
 
 ## Security and operational posture
 
 Veridex treats the client as untrusted. It validates every public procedure with Zod; invalid requests receive a generic safe message rather than raw schema or regex internals. Graph/database failures return a safe service message, and raw Cypher/driver errors are not rendered to users. Every graph operation uses a server-only driver, parameters for runtime data, a fresh session, and explicit read/write transaction boundaries.
 
-Approval state changes are compare-and-set style transitions: terminal records do not transition again. Evidence nodes are write-only from application behavior; there is no update or delete procedure. The MVP intentionally has no end-user authentication and restricts all selectable identities to seed data, so it must not be used to authorize real people or production systems.
+Approval state changes are compare-and-set style transitions: terminal records do not transition again. Evidence nodes are write-only from application behavior; there is no update or delete procedure. Each evaluated decision stores a versioned JSON explanation snapshot containing the ordered node list, relationship sequence, identifiers and labels, policy ID/name/version/effect/thresholds, required role, reason code/reasons, verdict, amount, and capture timestamp. Audit reads deserialize that artifact rather than rebuilding it from mutable graph state. **Authentication is intentionally omitted from the MVP. Identities are seeded for demonstration purposes only.** The application must not be used to authorize real people or production systems.
 
 ## GitHub delivery and deployment
 

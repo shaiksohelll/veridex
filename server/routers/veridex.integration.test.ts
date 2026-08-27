@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { TRPCError } from "@trpc/server";
 import { appRouter } from "../routers";
-import { closeCognoDbDriver } from "../cognodb/driver";
+import { closeCognoDbDriver, getCognoDbDriver } from "../cognodb/driver";
 import type { TrpcContext } from "../_core/context";
 
 const hasCognoDbCredentials = Boolean(
@@ -100,6 +100,77 @@ describe("veridex tRPC integration", () => {
       expect(beforeDecision[0]?.reasons).toContain(
         "Enterprise refunds from 500 to 999 require finance approval."
       );
+      const originalSnapshot = beforeDecision[0]?.explanationSnapshot;
+      expect(originalSnapshot).toMatchObject({
+        decision: {
+          actionRequestId: evaluated.facts.actionRequest.actionRequestId,
+          amount: 750,
+          reasonCode: "POLICY_APPROVAL_REQUIRED",
+          verdict: "APPROVAL_REQUIRED",
+        },
+        policy: {
+          conditions: { maxAmount: 999, minAmount: 500 },
+          name: "Enterprise Refund Approval",
+          policyId: "policy-approval-enterprise-refund",
+          version: 1,
+        },
+        requiredApprovalRole: { id: "role-finance-manager", name: "Finance Manager" },
+      });
+      expect(originalSnapshot?.relationships).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ relationship: "OPERATED_BY" }),
+          expect.objectContaining({ relationship: "GOVERNS" }),
+          expect.objectContaining({ relationship: "REQUIRES_ROLE" }),
+        ]),
+      );
+
+      const session = getCognoDbDriver().session();
+      try {
+        await session.executeWrite(transaction =>
+          transaction.run(
+            "MATCH (policy:Policy {policyId: $policyId}) SET policy.name = $name, policy.reasonText = $reasonText",
+            {
+              name: "Changed policy presentation",
+              policyId: "policy-approval-enterprise-refund",
+              reasonText: "Changed policy rationale",
+            },
+          ),
+        );
+        await session.executeWrite(transaction =>
+          transaction.run(
+            "MATCH (policy:Policy {policyId: $policyId})-[targeting:TARGETS]->(:Tier {tierId: $tierId}) DELETE targeting",
+            {
+              policyId: "policy-approval-enterprise-refund",
+              tierId: "tier-enterprise",
+            },
+          ),
+        );
+        const reloadedEvidence = await caller.veridex.evidence({
+          actionRequestId: evaluated.facts.actionRequest.actionRequestId,
+        });
+        expect(reloadedEvidence[0]?.explanationSnapshot).toEqual(originalSnapshot);
+      } finally {
+        await session.executeWrite(transaction =>
+          transaction.run(
+            "MATCH (policy:Policy {policyId: $policyId}) SET policy.name = $name, policy.reasonText = $reasonText",
+            {
+              name: "Enterprise Refund Approval",
+              policyId: "policy-approval-enterprise-refund",
+              reasonText: "Enterprise refunds from 500 to 999 require finance approval.",
+            },
+          ),
+        );
+        await session.executeWrite(transaction =>
+          transaction.run(
+            "MATCH (policy:Policy {policyId: $policyId}) MATCH (tier:Tier {tierId: $tierId}) MERGE (policy)-[:TARGETS]->(tier)",
+            {
+              policyId: "policy-approval-enterprise-refund",
+              tierId: "tier-enterprise",
+            },
+          ),
+        );
+        await session.close();
+      }
 
       const resolved = await caller.veridex.decideApproval({
         approvalId,

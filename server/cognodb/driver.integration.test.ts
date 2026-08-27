@@ -10,9 +10,13 @@ import {
 const hasCognoDbCredentials = Boolean(process.env.COGNODB_URI && process.env.COGNODB_PASSWORD);
 
 describe("CognoDB driver integration", () => {
-  it.runIf(hasCognoDbCredentials)("verifies connectivity through the official Neo4j-compatible driver", async () => {
-    await expect(verifyCognoDbConnectivity(getCognoDbDriver())).resolves.toBeUndefined();
-  });
+  it.runIf(hasCognoDbCredentials)(
+    "verifies connectivity through the official Neo4j-compatible driver",
+    async () => {
+      await expect(verifyCognoDbConnectivity(getCognoDbDriver())).resolves.toBeUndefined();
+    },
+    15_000,
+  );
 
   it.runIf(hasCognoDbCredentials)("uses CognoDB's provider default database", async () => {
       const config = parseCognoDbConfig({

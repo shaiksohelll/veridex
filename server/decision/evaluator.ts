@@ -43,6 +43,32 @@ export type EvidenceSnapshot = {
   verdict: Verdict;
 };
 
+export type EvidenceExplanationSnapshot = {
+  capturedAt: string;
+  decision: {
+    actionRequestId: string;
+    actionTypeId: string;
+    amount: number;
+    reasonCode: ReasonCode;
+    reasons: string[];
+    verdict: Verdict;
+  };
+  formatVersion: 1;
+  orderedNodes: GraphEntity[];
+  policy?: {
+    conditions: { maxAmount?: number; minAmount?: number };
+    effect: PolicyFact["effect"];
+    name: string;
+    policyId: string;
+    priority: number;
+    reasonCode: string;
+    reasonText: string;
+    version: number;
+  };
+  relationships: ExplanationStep[];
+  requiredApprovalRole?: GraphEntity;
+};
+
 export type DecisionResult = {
   eligibleApprovers: EligibleApprover[];
   evidenceSnapshot: EvidenceSnapshot;
@@ -54,6 +80,72 @@ export type DecisionResult = {
   selectedPolicy?: PolicyFact;
   verdict: Verdict;
 };
+
+function cloneGraphEntity(entity: GraphEntity): GraphEntity {
+  return entity.active === undefined
+    ? { id: entity.id, label: entity.label, name: entity.name }
+    : { active: entity.active, id: entity.id, label: entity.label, name: entity.name };
+}
+
+/**
+ * Produces the immutable, plain-data explanation artifact serialized with a
+ * decision. It copies the graph facts used by evaluation; it never re-queries
+ * current graph state.
+ */
+export function createEvidenceExplanationSnapshot(
+  decision: DecisionResult,
+  capturedAt: string,
+): EvidenceExplanationSnapshot {
+  const relationships = decision.explanationPath.map(step => ({
+    from: cloneGraphEntity(step.from),
+    relationship: step.relationship,
+    to: cloneGraphEntity(step.to),
+  }));
+  const seen = new Set<string>();
+  const orderedNodes: GraphEntity[] = [];
+  for (const relationship of relationships) {
+    for (const entity of [relationship.from, relationship.to]) {
+      const key = `${entity.label}:${entity.id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        orderedNodes.push(cloneGraphEntity(entity));
+      }
+    }
+  }
+
+  return {
+    capturedAt,
+    decision: {
+      actionRequestId: decision.evidenceSnapshot.actionRequestId,
+      actionTypeId: decision.evidenceSnapshot.actionTypeId,
+      amount: decision.evidenceSnapshot.amount,
+      reasonCode: decision.reasonCode,
+      reasons: [...decision.reasons],
+      verdict: decision.verdict,
+    },
+    formatVersion: 1,
+    orderedNodes,
+    policy: decision.selectedPolicy
+      ? {
+          conditions: {
+            maxAmount: decision.selectedPolicy.maxAmount,
+            minAmount: decision.selectedPolicy.minAmount,
+          },
+          effect: decision.selectedPolicy.effect,
+          name: decision.selectedPolicy.name,
+          policyId: decision.selectedPolicy.policyId,
+          priority: decision.selectedPolicy.priority,
+          reasonCode: decision.selectedPolicy.reasonCode,
+          reasonText: decision.selectedPolicy.reasonText,
+          version: decision.selectedPolicy.version,
+        }
+      : undefined,
+    relationships,
+    requiredApprovalRole: decision.requiredApprovalRole
+      ? cloneGraphEntity(decision.requiredApprovalRole)
+      : undefined,
+  };
+}
 
 const EFFECT_PRECEDENCE: Record<PolicyFact["effect"], number> = {
   ALLOW: 1,

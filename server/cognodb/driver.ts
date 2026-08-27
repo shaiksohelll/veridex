@@ -11,11 +11,12 @@ export class CognoDbUnavailableError extends Error {
 }
 
 let cachedDriver: Driver | undefined;
+const CONNECTION_ACQUISITION_TIMEOUT_MS = 10_000;
 
 /** Creates the official Neo4j-compatible driver for server-side use only. */
 export function createCognoDbDriver(config: CognoDbConfig): Driver {
   return neo4j.driver(uriOrThrow(config), neo4j.auth.basic(config.username, config.password), {
-    connectionAcquisitionTimeout: 5_000,
+    connectionAcquisitionTimeout: CONNECTION_ACQUISITION_TIMEOUT_MS,
     disableLosslessIntegers: true,
     maxConnectionPoolSize: 10,
     maxTransactionRetryTime: 5_000,

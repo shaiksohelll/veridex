@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { evaluateDecision, isPolicyApplicableForAmount, sortApplicablePolicies } from "./evaluator";
+import {
+  createEvidenceExplanationSnapshot,
+  evaluateDecision,
+  isPolicyApplicableForAmount,
+  sortApplicablePolicies,
+} from "./evaluator";
 import type { EvaluationGraphFacts, PolicyFact } from "../graph/repository";
 
 const financeManager = { active: true, id: "role-finance-manager", label: "Role", name: "Finance Manager" };
@@ -9,6 +14,7 @@ function policy(overrides: Partial<PolicyFact> = {}): PolicyFact {
     effect: "ALLOW",
     maxAmount: 499,
     minAmount: 1,
+    name: "Refund Allow",
     policyId: "policy-allow-refund",
     priority: 100,
     reasonCode: "POLICY_ALLOW",
@@ -65,6 +71,47 @@ describe("evaluateDecision", () => {
       verdict: "ALLOWED",
     });
     expect(result.explanationPath).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ relationship: "OPERATED_BY" }),
+        expect.objectContaining({ relationship: "BELONGS_TO" }),
+        expect.objectContaining({ relationship: "GOVERNS" }),
+      ]),
+    );
+  });
+
+  it("serializes the selected graph path and policy context deterministically for evidence", () => {
+    const decision = evaluateDecision(graphFacts());
+    const capturedAt = "2026-08-27T00:10:00.000Z";
+
+    const first = createEvidenceExplanationSnapshot(decision, capturedAt);
+    const second = createEvidenceExplanationSnapshot(decision, capturedAt);
+
+    expect(first).toEqual(second);
+    expect(first).toMatchObject({
+      capturedAt,
+      decision: {
+        actionRequestId: "request-1",
+        actionTypeId: "action-refund",
+        amount: 240,
+        reasonCode: "POLICY_ALLOW",
+        verdict: "ALLOWED",
+      },
+      formatVersion: 1,
+      policy: {
+        conditions: { maxAmount: 499, minAmount: 1 },
+        name: "Refund Allow",
+        policyId: "policy-allow-refund",
+        reasonText: "Refund is within the permitted limit.",
+      },
+    });
+    expect(first.orderedNodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "agent-billing", label: "Agent" }),
+        expect.objectContaining({ id: "customer-acme", label: "Customer" }),
+        expect.objectContaining({ id: "policy-allow-refund", label: "Policy" }),
+      ]),
+    );
+    expect(first.relationships).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ relationship: "OPERATED_BY" }),
         expect.objectContaining({ relationship: "BELONGS_TO" }),

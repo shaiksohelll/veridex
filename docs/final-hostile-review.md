@@ -20,7 +20,7 @@
 | Duplicate transition | A second decision reads the current approval state and maps a terminal record to an explicit conflict. The router integration test asserts the `CONFLICT` result. | Pass |
 | Approval eligibility | The transition query requires both the assigned role and an active deciding user with `HAS_ROLE`; otherwise it returns a safe eligibility error. | Pass |
 | Evidence immutability | There is no application update or delete operation for `Evidence`. Decision evidence is created in the same transaction as the approval when needed; approval evidence is created in the terminal-transition transaction. Seed evidence uses create-only merge behavior. | Pass |
-| Evidence snapshot | Newly generated decision evidence persists action request, action type, amount, customer, resource, policy/version, reason code/reasons, verdict, and timestamp. A live router integration test asserts the snapshot fields. | Pass |
+| Evidence snapshot | Decision evidence stores a versioned immutable JSON artifact with ordered node IDs/labels, relationship types, current policy ID/name/version/effect/conditions, required role, decision/reasons, and capture timestamp. A live integration test changes the current policy text and deletes its current `TARGETS` edge, then proves the loaded historical snapshot is byte-for-byte unchanged before restoring graph state. | Pass |
 | Safe public errors | Shared tRPC formatting replaces malformed-input details with a generic message and removes stack metadata. Router tests assert that Zod and regex details are absent. Database errors are mapped to safe service responses. | Pass |
 | Secret boundary | `server/cognodb/config.ts` reads only the standard `COGNODB_URI`, `COGNODB_USERNAME`, and `COGNODB_PASSWORD` Bolt settings from `process.env`. Veridex does not read `COGNODB_DATABASE`; every graph session uses `driver.session()` without a database option, delegating selection to CognoDB/the driver rather than guessing. A client-source audit found no `COGNODB`, `neo4j-driver`, or CognoDB configuration references under `client/`. The driver remains server-only. | Pass |
 | Secret-file hygiene | `.gitignore` excludes `.env` and `.env.*`; the managed project secret mechanism supplies the live credentials. The platform restricts direct environment-file creation, so the placeholder-only example contract is documented in `README.md` rather than fabricating a secret file. | Pass with documented platform limitation |
@@ -33,7 +33,7 @@
 |---|---|---|
 | Repository test assumed policy array index zero was the approval policy. | A legitimate higher-precedence block policy made a valid graph test flaky/incorrect. | The test now locates the approval policy by stable ID and still asserts its required role and eligible approver. The full suite passes. |
 | A selected approval role could be inactive. | An inactive governance role might still yield an approval-required decision. | The pure evaluator now returns `BLOCKED / APPROVAL_ROLE_MISSING` if the role is absent or inactive; dedicated unit coverage passes. |
-| New evidence did not persist the full decision snapshot. | A later policy change could make an audit read depend too heavily on mutable graph context. | Create-only evidence now captures action/action type, amount, customer, resource, policy/version, reason/reasons, verdict, and timestamp; live integration coverage verifies it. |
+| New evidence did not persist an explanation-path snapshot. | A later policy or relationship change could make an audit read depend on mutable graph context. | Create-only decision evidence now stores a versioned JSON path snapshot with nodes, edges, policy context, required role, decision, reasons, and timestamp. The live test mutates policy text and removes the present `TARGETS` edge, then proves historical evidence is unchanged. |
 | tRPC validation errors exposed internal schema detail. | The client could observe Zod/regex implementation internals. | Shared error formatting returns a generic bad-request message with no serialized stack; HTTP-level validation tests pass. |
 | Playwright result artifacts appeared as untracked output. | Test output could pollute source delivery. | `test-results/` and `playwright-report/` are ignored. |
 
@@ -44,7 +44,7 @@
 | `pnpm graph:verify` | Pass: schema applied, seed run twice, all seven required scenarios returned expected verdicts. |
 | `pnpm lint` | Pass with zero warnings. |
 | `pnpm check` | Pass in TypeScript strict mode. |
-| `pnpm test` | Pass: 8 files / 27 tests, including live credential-gated CognoDB integration and a provider-default database session assertion. |
+| `pnpm test` | Pass: 8 files / 28 tests, including live credential-gated CognoDB integration, provider-default database session, and immutable explanation-path snapshot assertions. |
 | `pnpm build` | Pass; Vite reports a non-blocking client bundle-size advisory. |
 | `VERIDEX_E2E_BASE_URL=http://localhost:3000 pnpm test:e2e` | Pass: 2 browser tests. |
 | GitHub Actions quality gate | Configured to run frozen-lockfile install, lint, type-check, Vitest, and production build on pushes and pull requests. |

@@ -24,6 +24,7 @@ export type PolicyFact = {
   effect: "ALLOW" | "BLOCK" | "REQUIRE_APPROVAL";
   maxAmount?: number;
   minAmount?: number;
+  name: string;
   policyId: string;
   priority: number;
   reasonCode: string;
@@ -181,7 +182,7 @@ export async function loadApplicablePolicies(
 
   try {
     const result = await session.run(
-      "MATCH (policy:Policy {active: true})-[:GOVERNS]->(:ActionType {actionTypeId: $actionTypeId}) MATCH (policy)-[:TARGETS]->(:Tier {tierId: $tierId}) OPTIONAL MATCH (policy)-[:REQUIRES_ROLE]->(requiredRole:Role) RETURN policy.effect AS effect, policy.maxAmount AS maxAmount, policy.minAmount AS minAmount, policy.policyId AS policyId, policy.priority AS priority, policy.reasonCode AS reasonCode, policy.reasonText AS reasonText, policy.version AS version, CASE WHEN requiredRole IS NULL THEN null ELSE {active: requiredRole.active, id: requiredRole.roleId, label: 'Role', name: requiredRole.name} END AS requiredRole ORDER BY CASE policy.effect WHEN 'BLOCK' THEN 3 WHEN 'REQUIRE_APPROVAL' THEN 2 ELSE 1 END DESC, policy.priority ASC, policy.policyId ASC",
+      "MATCH (policy:Policy {active: true})-[:GOVERNS]->(:ActionType {actionTypeId: $actionTypeId}) MATCH (policy)-[:TARGETS]->(:Tier {tierId: $tierId}) OPTIONAL MATCH (policy)-[:REQUIRES_ROLE]->(requiredRole:Role) RETURN policy.effect AS effect, policy.maxAmount AS maxAmount, policy.minAmount AS minAmount, policy.name AS name, policy.policyId AS policyId, policy.priority AS priority, policy.reasonCode AS reasonCode, policy.reasonText AS reasonText, policy.version AS version, CASE WHEN requiredRole IS NULL THEN null ELSE {active: requiredRole.active, id: requiredRole.roleId, label: 'Role', name: requiredRole.name} END AS requiredRole ORDER BY CASE policy.effect WHEN 'BLOCK' THEN 3 WHEN 'REQUIRE_APPROVAL' THEN 2 ELSE 1 END DESC, policy.priority ASC, policy.policyId ASC",
       input,
     );
 
@@ -189,6 +190,7 @@ export async function loadApplicablePolicies(
       effect: get<PolicyFact["effect"]>(record, "effect"),
       maxAmount: get<number | null>(record, "maxAmount") ?? undefined,
       minAmount: get<number | null>(record, "minAmount") ?? undefined,
+      name: get<string>(record, "name"),
       policyId: get<string>(record, "policyId"),
       priority: get<number>(record, "priority"),
       reasonCode: get<string>(record, "reasonCode"),

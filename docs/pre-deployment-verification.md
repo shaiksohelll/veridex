@@ -3,27 +3,27 @@
 **Review date:** 2026-08-27  
 **Scope:** Assignment-level functional, graph, browser, build, repository, and dependency checks. This review does **not** publish or deploy the application.
 
-> **Outcome:** The required take-home workflow is demonstrably functional in the managed development environment. It is **not production-ready for a public launch** until the dependency findings, authentication scope, and immutable explanation-path gap are resolved.
+> **Outcome:** The required take-home workflow is demonstrably functional in the managed development environment. The dependency findings and immutable explanation-path gap have been remediated; the deliberately unauthenticated demo scope remains a production-use limitation.
 
 ## Verification record
 
 | Check | Evidence-backed result |
 |---|---|
-| Current delivery state | `main` matches the private GitHub remote at `2dd94fd`; the only local change during this review is this verification record and its tracker entry. The latest GitHub Actions run completed successfully. |
+| Current delivery state | The private GitHub delivery branch is clean before the remediation commit. Prior CI passed, and the final remediation commit is required to pass the same quality gate before handoff. |
 | Live graph scenarios | `pnpm graph:verify` passed. It applied repeatable schema/seed operations and returned the expected verdicts for `ALLOWED`, `BLOCKED_POLICY`, `APPROVAL_REQUIRED`, `UNAUTHORIZED_AGENT`, `UNVERIFIED_CUSTOMER`, `MISSING_APPROVER`, and `NO_APPLICABLE_POLICY`. |
-| Deterministic/application tests | The immediately preceding full local run passed all **8 Vitest files / 27 tests**, including the live provider-default CognoDB session assertion. The corrected source has not changed since that run. |
+| Deterministic/application tests | The final local gate passed all **8 Vitest files / 28 tests**, including the live provider-default CognoDB session and immutable explanation snapshot assertions. |
 | Browser journey | `VERIDEX_E2E_BASE_URL=http://localhost:3000 pnpm test:e2e` passed **2 Playwright tests**, including evaluate → explain → approve → audit and visible safe query-failure states. |
-| Production artifact | The already-built `dist` server started under `NODE_ENV=production` on an isolated local port and served the compiled application with a successful HTTP smoke check. It was then stopped. |
+| Production artifact | `pnpm build` passed after remediation; the earlier compiled artifact also served through an isolated `NODE_ENV=production` HTTP smoke test. |
 | Responsive visual check | Desktop and 375 px mobile captures retain the numbered evaluate/explain/approval structure with no observed horizontal overflow. The initial neutral/loading state is rendered deliberately rather than leaving a blank page. |
-| Client secret boundary | A source audit found no `COGNODB`, `neo4j-driver`, or `cognodb` references under `client/`. No environment files are tracked by Git. |
+| Client secret boundary | The final source audit found no browser-visible CognoDB URI/password setting, and no environment files are tracked by Git. |
 | Repository delivery | `git fsck --no-reflogs` passed. `shaiksohelll/veridex` is private, and the CI workflow uses read-only contents permission with pinned action revisions. |
 
 ## Pre-deployment issues
 
 | Severity | Finding | Evidence and consequence | Required disposition before public production use |
 |---|---|---|---|
-| **Blocker** | Production dependency audit is not clean. | `pnpm audit --prod --json` exited non-zero with **81 advisories**: 1 critical, 21 high, 49 moderate, and 10 low. The critical item is transitive `fast-xml-parser@5.2.5` from the AWS SDK chain; its advisory recommends `>=5.3.5`. Direct `axios@1.12.2` accounts for multiple high/moderate findings, and its patch recommendations extend through `>=1.18.0`. The GitHub Actions gate does not run a dependency audit. [1] [2] | Upgrade or remove unneeded production dependencies; then re-lock, run a fresh audit with no critical/high finding accepted, and rerun the full quality and browser suite. Add a non-blocking or enforcing audit policy to CI as appropriate for the deployment policy. |
-| **Major** | Decision evidence does not save the evaluated relationship-path snapshot. | `DecisionResult.explanationPath` is returned for the current UI, but `recordDecisionEvidence` persists decision fields without an `explanationPathJson` (or equivalent) property. If the graph changes later, the exact relationship traversal used by a historical decision cannot be reconstructed solely from the immutable evidence node. | Persist a serialized, validated relationship-path snapshot when decision evidence is created; expose it on audit reads and add an integration assertion. |
+| **Resolved** | Production dependency audit was not clean. | Baseline: **81 advisories** (1 critical, 21 high, 49 moderate, 10 low). Minimal in-major direct upgrades addressed Axios, tRPC, AWS SDK, Express 4, Drizzle, and NanoID; unused Streamdown/Recharts template modules were removed. The final `pnpm audit --prod --json` reports **0 critical, 0 high, 0 moderate, and 0 low**. [1] [2] | Re-run audit on every dependency change. |
+| **Resolved** | Decision evidence did not save the evaluated relationship-path snapshot. | `recordDecisionEvidence` now serializes a versioned snapshot containing ordered graph nodes, relationship types, policy metadata/thresholds, required role, decision, reason code/reasons, and timestamp. Audit reads deserialize the stored artifact; the live integration test mutates current policy text and removes the current `TARGETS` relationship, then asserts historical evidence is unchanged. | Keep the snapshot schema backward-compatible and append a new format version if it evolves. |
 | **Major** | MVP is deliberately unauthenticated. | The public tRPC flow relies on seeded demo identities, and the repository documentation explicitly states that it must not authorize real users or actions. | Deploy only as a clearly labeled take-home demonstration with demo data, or add authenticated actor identity and authorization before any real-world use. |
 | **Minor** | Recent delivery commits use the `Manus <dev-agent@manus.ai>` author, not the requested `Shaik Sohel <shaiksohelll05@gmail.com>` identity. | `2dd94fd` and `8ac7967` have the Manus author identity, while the principal feature commit has the requested identity. This does not alter runtime behavior but weakens the requested handoff hygiene. | Decide whether to preserve history as-is or rewrite/recreate the affected commits with the requested identity before final external submission. Do not force-push without an explicit decision. |
 | **Minor** | Visual capture can show the intentionally neutral/loading state. | Browser E2E passes, and console/network review found no recent browser exception. However, an early visual capture showed metadata-loading skeletons before the public data query completed. | For the recording, wait for selectors to populate before capture and demonstrate a completed decision rather than the neutral page. |
@@ -34,7 +34,7 @@ The focused scope remains appropriate for the take-home: one resource per reques
 
 ## Readiness decision
 
-The submission is ready to **demonstrate** in the managed preview and to record the required workflow. It should **not be published as a production authorization service** until the blocker and major items above are addressed. No deployment action was taken in this phase.
+The submission is ready to **demonstrate** in the managed preview and to record the required workflow. It remains an intentionally unauthenticated demo and must not be used as a production authorization service until real identity and tenancy controls are added. No deployment action was taken in this phase.
 
 ## References
 

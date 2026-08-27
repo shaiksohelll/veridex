@@ -1,6 +1,10 @@
 import { customAlphabet } from "nanoid";
 import type { Driver, Record as Neo4jRecord } from "neo4j-driver";
-import type { DecisionResult } from "../decision/evaluator";
+import {
+  createEvidenceExplanationSnapshot,
+  type DecisionResult,
+  type EvidenceExplanationSnapshot,
+} from "../decision/evaluator";
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -26,6 +30,7 @@ export type EvidenceRecord = {
   customerId?: string;
   eventType: "APPROVAL_DECIDED" | "DECISION_EVALUATED";
   evidenceId: string;
+  explanationSnapshot?: EvidenceExplanationSnapshot;
   policy?: { policyId: string; version: number };
   reasonCode: string;
   reasons?: string[];
@@ -55,6 +60,16 @@ function get<T>(record: Neo4jRecord, key: string): T {
 function sessionFor(driver: Driver) {
   return driver.session();
 }
+function parseExplanationSnapshot(
+  value: string | null,
+): EvidenceExplanationSnapshot | undefined {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value) as EvidenceExplanationSnapshot;
+  } catch {
+    return undefined;
+  }
+}
 const createGraphId = customAlphabet(
   "0123456789abcdefghijklmnopqrstuvwxyz",
   12
@@ -71,12 +86,14 @@ export async function recordDecisionEvidence(
     : undefined;
   const evidenceId = `evidence-${createGraphId()}`;
   const createdAt = new Date().toISOString();
+  const explanationSnapshot = createEvidenceExplanationSnapshot(decision, createdAt);
+  const explanationSnapshotJson = JSON.stringify(explanationSnapshot);
   const session = sessionFor(driver);
 
   try {
     return await session.executeWrite(async transaction => {
       const result = await transaction.run(
-        "MATCH (request:ActionRequest {actionRequestId: $actionRequestId}) OPTIONAL MATCH (requiredRole:Role {roleId: $requiredRoleId}) WITH request, requiredRole CREATE (evidence:Evidence {actionRequestId: $actionRequestId, actionTypeId: $actionTypeId, agentId: $agentId, amount: $amount, createdAt: $createdAt, customerId: $customerId, eventType: 'DECISION_EVALUATED', evidenceId: $evidenceId, policyId: $policyId, policyVersion: $policyVersion, reasonCode: $reasonCode, reasons: $reasons, resourceId: $resourceId, verdict: $verdict}) CREATE (request)-[:GENERATES]->(evidence) FOREACH (_ IN CASE WHEN $requiresApproval AND requiredRole IS NOT NULL THEN [1] ELSE [] END | CREATE (approval:Approval {actionRequestId: $actionRequestId, approvalId: $approvalId, createdAt: $createdAt, policyId: $policyId, policyVersion: $policyVersion, requiredRoleId: $requiredRoleId, status: 'PENDING'}) CREATE (request)-[:HAS_APPROVAL]->(approval) CREATE (approval)-[:ASSIGNED_TO]->(requiredRole)) RETURN evidence.evidenceId AS evidenceId, evidence.eventType AS eventType, CASE WHEN $requiresApproval THEN $approvalId ELSE null END AS approvalId",
+        "MATCH (request:ActionRequest {actionRequestId: $actionRequestId}) OPTIONAL MATCH (requiredRole:Role {roleId: $requiredRoleId}) WITH request, requiredRole CREATE (evidence:Evidence {actionRequestId: $actionRequestId, actionTypeId: $actionTypeId, agentId: $agentId, amount: $amount, createdAt: $createdAt, customerId: $customerId, eventType: 'DECISION_EVALUATED', evidenceId: $evidenceId, explanationSnapshotJson: $explanationSnapshotJson, policyId: $policyId, policyVersion: $policyVersion, reasonCode: $reasonCode, reasons: $reasons, resourceId: $resourceId, verdict: $verdict}) CREATE (request)-[:GENERATES]->(evidence) FOREACH (_ IN CASE WHEN $requiresApproval AND requiredRole IS NOT NULL THEN [1] ELSE [] END | CREATE (approval:Approval {actionRequestId: $actionRequestId, approvalId: $approvalId, createdAt: $createdAt, policyId: $policyId, policyVersion: $policyVersion, requiredRoleId: $requiredRoleId, status: 'PENDING'}) CREATE (request)-[:HAS_APPROVAL]->(approval) CREATE (approval)-[:ASSIGNED_TO]->(requiredRole)) RETURN evidence.evidenceId AS evidenceId, evidence.eventType AS eventType, CASE WHEN $requiresApproval THEN $approvalId ELSE null END AS approvalId",
         {
           actionRequestId: decision.evidenceSnapshot.actionRequestId,
           actionTypeId: decision.evidenceSnapshot.actionTypeId,
@@ -86,6 +103,7 @@ export async function recordDecisionEvidence(
           createdAt,
           customerId: decision.evidenceSnapshot.customerId ?? null,
           evidenceId,
+          explanationSnapshotJson,
           policyId: decision.selectedPolicy?.policyId ?? null,
           policyVersion: decision.selectedPolicy?.version ?? null,
           reasonCode: decision.reasonCode,
@@ -108,6 +126,7 @@ export async function recordDecisionEvidence(
         customerId: decision.evidenceSnapshot.customerId,
         eventType: "DECISION_EVALUATED",
         evidenceId: get<string>(record, "evidenceId"),
+        explanationSnapshot,
         policy: decision.selectedPolicy
           ? {
               policyId: decision.selectedPolicy.policyId,
@@ -260,7 +279,7 @@ export async function loadEvidence(
   const session = sessionFor(driver);
   try {
     const result = await session.run(
-      "MATCH (:ActionRequest {actionRequestId: $actionRequestId})-[:GENERATES]->(evidence:Evidence) RETURN evidence.actionRequestId AS actionRequestId, evidence.actionTypeId AS actionTypeId, evidence.agentId AS agentId, evidence.amount AS amount, evidence.approvalDecision AS approvalDecision, evidence.createdAt AS createdAt, evidence.customerId AS customerId, evidence.eventType AS eventType, evidence.evidenceId AS evidenceId, evidence.policyId AS policyId, evidence.policyVersion AS policyVersion, evidence.reasonCode AS reasonCode, evidence.reasons AS reasons, evidence.resourceId AS resourceId, evidence.verdict AS verdict ORDER BY evidence.createdAt ASC, evidence.evidenceId ASC",
+      "MATCH (:ActionRequest {actionRequestId: $actionRequestId})-[:GENERATES]->(evidence:Evidence) RETURN evidence.actionRequestId AS actionRequestId, evidence.actionTypeId AS actionTypeId, evidence.agentId AS agentId, evidence.amount AS amount, evidence.approvalDecision AS approvalDecision, evidence.createdAt AS createdAt, evidence.customerId AS customerId, evidence.eventType AS eventType, evidence.evidenceId AS evidenceId, evidence.explanationSnapshotJson AS explanationSnapshotJson, evidence.policyId AS policyId, evidence.policyVersion AS policyVersion, evidence.reasonCode AS reasonCode, evidence.reasons AS reasons, evidence.resourceId AS resourceId, evidence.verdict AS verdict ORDER BY evidence.createdAt ASC, evidence.evidenceId ASC",
       { actionRequestId }
     );
     return result.records.map(record => ({
@@ -277,6 +296,9 @@ export async function loadEvidence(
       customerId: get<string | null>(record, "customerId") ?? undefined,
       eventType: get<EvidenceRecord["eventType"]>(record, "eventType"),
       evidenceId: get<string>(record, "evidenceId"),
+      explanationSnapshot: parseExplanationSnapshot(
+        get<string | null>(record, "explanationSnapshotJson"),
+      ),
       policy: get<string | null>(record, "policyId")
         ? {
             policyId: get<string>(record, "policyId"),
