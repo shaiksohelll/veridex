@@ -1,0 +1,51 @@
+# Project TODO
+
+- [x] Inspect the existing Veridex scaffold, repository state, package scripts, and GitHub connection.
+- [x] Add a minimal GitHub Actions quality gate for dependency installation, lint, type-check, tests, and production build.
+- [x] Create or connect a private GitHub repository with a clean take-home-assignment workflow.
+- [x] Verify the local quality commands and GitHub workflow configuration before beginning Phase 1 foundation work.
+- [x] Establish strict TypeScript, server-only CognoDB driver configuration, graph schema, idempotent seed data, and seeded-scenario verification in Phase 1.
+- [x] Add the official Neo4j-compatible JavaScript driver and server-only validated CognoDB environment boundary.
+- [x] Add a committed root `.env.example` placeholder if the managed environment permits environment-file creation; the managed environment does not permit direct environment-file creation, so the placeholder-only variable contract is documented in README.md and live values remain in managed secrets.
+- [x] Define repeatable constraints and indexes for the frozen 12-label, 16-relationship CognoDB schema.
+- [x] Implement an idempotent seed process for realistic authorization, policy, approval, and evidence context.
+- [x] Verify the seven required scenarios against the actual graph without relying on record counts.
+- [x] Document frozen Phase 1 rules and record lint, type-check, test, and production-build results before Phase 2.
+- [x] Build server-only graph repository functions that return normalized authorization, context, policy, and approver facts.
+- [x] Implement the reusable pure deterministic evaluator with stable verdicts, reason codes, policy precedence, and one-resource validation.
+- [x] Unit-test allowed, blocked, approval-required, default-deny, deterministic tie-breaking, amount bounds, unauthorized, inactive-agent, unverified-customer, missing-approver, invalid-input, and one-resource behavior.
+- [x] Add validated public tRPC procedures for demo metadata, create-and-evaluate, explanation, approval queue, approval decision, and audit evidence.
+- [x] Map validation, not-found, conflict, and database-unavailable failures to safe structured API responses.
+- [x] Add public demo-metadata, create-and-evaluate, and explanation procedures backed by graph-derived facts and the pure evaluator.
+- [x] Validate malformed input before database access and map not-found and database/configuration failures to safe responses without exposing raw errors.
+- [x] Design and build the tactile evaluation, explanation, approval, and evidence interface with complete operation states.
+- [x] Persist approval-required results as `PENDING` Approval nodes with assigned roles and append a decision evidence record in the same write transaction.
+- [x] Implement `PENDING → APPROVED/REJECTED` via an eligible active demo user, reject duplicate terminal transitions, and append a separate approval evidence record.
+- [x] Prove live API approval behavior, append-only evidence ordering, duplicate-transition rejection, and concurrent terminal-attempt safety.
+- [x] Map all Veridex validation failures to sanitized API messages without exposing Zod schema internals or regex patterns.
+- [x] Add API tests for safe invalid evaluate, explain/evidence, and approval-decision validation responses.
+- [x] Verify the visible browser journey: evaluate approval-required action, show relationship path, approve with an eligible demo user, and display appended audit evidence.
+- [x] Show persisted append-only evidence in the UI for allowed and blocked decisions as well as approval-required decisions.
+- [x] Load persisted approval and evidence state from the Veridex APIs with explicit loading, empty, and error handling.
+- [x] Add a neutral pre-evaluation governance state distinct from a decision that does not require approval.
+- [x] Render an explicit explanation-query error state rather than silently retaining stale decision details.
+- [x] Test initial governance emptiness and safe explanation/evidence loading failure states.
+- [x] Add and run a reproducible Playwright browser test for the evaluate, explain, approve, and audit journey against a seeded server.
+- [x] Test initial governance emptiness and safe explanation/evidence loading failure states.
+- [x] Finalize README coverage for architecture, graph model, setup, security, testing, deployment posture, and limitations.
+- [x] Perform a hostile implementation review of deterministic decisions, parameterized graph access, approval safety, evidence immutability, and repository hygiene.
+- [x] Run the final local quality gate and seeded-browser journey, then save and push the delivery checkpoint.
+- [x] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.
+- [x] Write a final hostile-review report with explicit code-inspection evidence for decision, Cypher, approval, evidence, secret, and repository-hygiene boundaries.
+- [x] Treat absent or blank `COGNODB_DATABASE` as provider-default database selection; validate against the live CognoDB connection and document the behavior.
+- [x] Run the remaining assignment-level graph, quality, browser, security, and delivery checks; document pre-deployment issues without adding features.
+- [x] Remediate critical and high production dependency advisories through minimal compatible upgrades, then prove the post-remediation audit result.
+- [x] Persist an immutable deterministic explanation-path snapshot with decision evidence and prove it survives later graph changes.
+- [x] Commit the remediations with the configured user identity and verify the final GitHub Actions quality gate without deploying.
+- [x] Research 8–12 accessible public editorial/product-interface references for design principles and document an original Veridex direction; Mobbin was checked but its account requires a paid plan.
+- [x] Redesign the Veridex application shell, evaluation, decision, explanation, approval, and evidence presentation without changing graph, decision, API, approval, or evidence semantics.
+- [x] Verify all workflow states, verdicts, safe errors, loading/empty states, and responsive layouts through browser inspection and Playwright before the next non-deployment checkpoint.
+- [x] Browser-verify the redesigned UI for an ALLOWED scenario and record the visible decision, explanation, and evidence states.
+- [x] Browser-verify the redesigned UI for a BLOCKED scenario and record the visible decision, explanation, and evidence states.
+- [x] Browser-verify redesigned metadata/evaluation loading states and the blocked-decision relationship trace before checkpointing.
+- [x] Browser-verify the evaluation mutation pending state, including its disabled command and in-progress text, before checkpointing.
