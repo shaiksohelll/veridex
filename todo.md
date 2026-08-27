@@ -42,3 +42,10 @@
 - [x] Remediate critical and high production dependency advisories through minimal compatible upgrades, then prove the post-remediation audit result.
 - [x] Persist an immutable deterministic explanation-path snapshot with decision evidence and prove it survives later graph changes.
 - [x] Commit the remediations with the configured user identity and verify the final GitHub Actions quality gate without deploying.
+- [x] Research 8–12 accessible public editorial/product-interface references for design principles and document an original Veridex direction; Mobbin was checked but its account requires a paid plan.
+- [x] Redesign the Veridex application shell, evaluation, decision, explanation, approval, and evidence presentation without changing graph, decision, API, approval, or evidence semantics.
+- [x] Verify all workflow states, verdicts, safe errors, loading/empty states, and responsive layouts through browser inspection and Playwright before the next non-deployment checkpoint.
+- [x] Browser-verify the redesigned UI for an ALLOWED scenario and record the visible decision, explanation, and evidence states.
+- [x] Browser-verify the redesigned UI for a BLOCKED scenario and record the visible decision, explanation, and evidence states.
+- [x] Browser-verify redesigned metadata/evaluation loading states and the blocked-decision relationship trace before checkpointing.
+- [x] Browser-verify the evaluation mutation pending state, including its disabled command and in-progress text, before checkpointing.
