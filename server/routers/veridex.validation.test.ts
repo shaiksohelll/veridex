@@ -162,6 +162,45 @@ describe("Veridex validation responses", () => {
     );
   });
 
+  /**
+   * Each timestamp below is a valid ISO-8601 instant, so Date.parse accepts it,
+   * but none matches a stored createdAt value byte for byte. The keyset filter
+   * compares the cursor timestamp as a string, so accepting these would place
+   * the boundary in the wrong position and silently drop requests from the
+   * audit history rather than failing loudly.
+   */
+  it("rejects non-canonical cursor timestamps that would break keyset ordering", async () => {
+    const utcOffset = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T05:30:00.000+05:30",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expectSafeValidationPayload(utcOffset.body, utcOffset.status);
+
+    const twoFractionalDigits = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.00Z",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expectSafeValidationPayload(
+      twoFractionalDigits.body,
+      twoFractionalDigits.status
+    );
+
+    const noFractionalDigits = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00Z",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expectSafeValidationPayload(
+      noFractionalDigits.body,
+      noFractionalDigits.status
+    );
+  });
+
   it("does not report a well-formed cursor as a validation error", async () => {
     const wellFormed = await invalidQuery("veridex.listRequests", {
       cursor: encodeCursorPayload({
