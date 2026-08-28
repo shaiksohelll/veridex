@@ -14,8 +14,7 @@
     "graph:schema": "tsx scripts/apply-graph-schema.ts",
     "graph:seed": "tsx scripts/seed-graph.ts",
     "graph:verify": "tsx scripts/verify-phase1.ts",
-    "test:e2e": "playwright test",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1119.0",
