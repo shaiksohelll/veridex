@@ -56,13 +56,13 @@ flowchart LR
   ActionRequest -->|GENERATES| Evidence
 ```
 
-The four traversals that decide a verdict:
+The four graph paths used by the decision workflow:
 
 ```text
 Agent → User → Role → Permission → ActionType
 Agent → ActionRequest → Resource → Customer → Tier
 Policy → ActionType and Tier → optional required Role → eligible Users
-ActionRequest → Approval / Evidence
+ActionRequest → Approval / Evidence   (persistence / retrieval — not a verdict input)
 ```
 
 A relational schema could answer these with joins. The reason a graph earns its place here is that the **explanation is the product**: the same traversal that decides the verdict is the artifact shown to the user and frozen into evidence. There is no second query, and no risk of the explanation drifting from the decision.
@@ -327,7 +327,7 @@ Evaluate approval-required request
 
 It also verifies the neutral pre-evaluation state plus visible safe errors when explanation or evidence refreshes fail. The test is intentionally opt-in because it needs a running server with reachable CognoDB rather than fake client data.
 
-The most recent full local verification run against live CognoDB completed with **8 Vitest files / 43 tests passing**. `pnpm graph:verify` passed immediately before and immediately after that run, confirming that all seven required scenarios resolve to their expected verdicts and that the test suite does not mutate or remove seeded fixtures.
+The most recent full local verification run against live CognoDB completed with **8 Vitest files / 43 tests passing**. `pnpm graph:verify` passed immediately before and immediately after that run, confirming that all seven required scenarios resolve to their expected verdicts and that the test suite does not leave seeded fixtures mutated or removed after the run.
 
 The live graph tests are credential-gated with `it.runIf(...)` on `COGNODB_URI` and `COGNODB_PASSWORD`. GitHub Actions does not hold those credentials, so **those specific tests are skipped in CI**; CI verifies install-from-lockfile, lint, strict type-checking, the remaining tests, and the production build on `main` pushes and pull requests. Live CognoDB coverage is therefore verified locally rather than in CI. The Playwright journey is opt-in and was not part of the latest verification run.
 
@@ -363,7 +363,7 @@ This is a focused take-home MVP. It intentionally supports one resource per requ
 
 Two operational limitations are worth stating explicitly:
 
-- **The integration tests share the demo database.** `COGNODB_DATABASE` is not wired up, so there is no isolated test database. Every `pnpm test` run appends `ActionRequest`, `Approval`, and `Evidence` rows to the same graph the demo reads from, and one test temporarily mutates a policy edge before restoring it. Run `pnpm graph:verify` after testing and before demonstrating. Provisioning a dedicated test database is the clean fix.
+- **The integration tests share the demo database.** `COGNODB_DATABASE` is not wired up, so there is no isolated test database. When CognoDB credentials are present, `pnpm test` appends `ActionRequest`, `Approval`, and `Evidence` rows to the same graph the demo reads from, and one test temporarily mutates a policy edge before restoring it. Credentialless runs skip those tests and write nothing. Run `pnpm graph:verify` after testing and before demonstrating. Provisioning a dedicated test database is the clean fix.
 - **The hosted demo sleeps.** The Render free instance suspends when idle, so the first request after inactivity pays a cold start of up to roughly a minute.
 
 The first production extensions should be authenticated operator identity, tenant filtering, policy lifecycle/versioning controls, configurable self-approval restrictions, richer multi-resource policy semantics, and impact analysis that discovers affected action requests, agents, resources, and customers before a policy change is applied.
