@@ -5,10 +5,6 @@ export default tseslint.config(
   {
     ignores: [
       ".git/**",
-      ".manus-logs/**",
-      "client/public/__manus__/**",
-      "client/src/_core/**",
-      "client/src/pages/ComponentShowcase.tsx",
       "client/src/pages/Home.tsx",
       "coverage/**",
       "dist/**",

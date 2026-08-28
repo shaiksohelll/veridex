@@ -12,7 +12,6 @@ function context(): TrpcContext {
   return {
     req: {} as TrpcContext["req"],
     res: {} as TrpcContext["res"],
-    user: null,
   };
 }
 
