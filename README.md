@@ -65,6 +65,8 @@ Policy → ActionType and Tier → optional required Role → eligible Users
 ActionRequest → Approval / Evidence
 ```
 
+A relational schema could answer these with joins. The reason a graph earns its place here is that the **explanation is the product**: the same traversal that decides the verdict is the artifact shown to the user and frozen into evidence. There is no second query, and no risk of the explanation drifting from the decision.
+
 ## Architecture
 
 The repository intentionally uses the existing full-stack scaffold rather than a framework migration: **React 19 + Vite**, **Express**, **tRPC**, **TypeScript strict mode**, **Tailwind 4**, and **Vitest**. It is a single Node process that is appropriate for managed autoscaling and requires no worker or queue.
@@ -177,6 +179,8 @@ The commands below are intentionally split so the schema, data, and verification
 | `pnpm test:e2e` | Runs the Playwright journey when `VERIDEX_E2E_BASE_URL` points to a seeded server. |
 | `pnpm build` | Produces the Vite client and bundled Node server production build. |
 
+`pnpm graph:verify` is the canonical pre-demo command. It applies the schema, seeds, and then proves all seven scenarios resolve correctly, so it both repairs and verifies the demo graph in one step.
+
 ## Environment variables
 
 All values are server-side secrets. Do not commit a real `.env` file or expose a `COGNODB_*` value through `VITE_*` variables. The managed project secret facility is the intended configuration path.
@@ -194,7 +198,7 @@ The `.gitignore` excludes `.env` and `.env.*`. The required variable contract is
 
 ## Core Cypher operations
 
-All runtime values are passed as Cypher parameters. The following patterns are static and representative; the source modules contain the complete statements.
+All runtime values are passed as Cypher parameters. Labels, relationship types, and property names are static code constants.
 
 | Operation | Static Cypher responsibility | Source |
 |---|---|---|
@@ -206,7 +210,106 @@ All runtime values are passed as Cypher parameters. The following patterns are s
 | Approval creation | Create `Approval`, `HAS_APPROVAL`, `ASSIGNED_TO`, and `DECISION_EVALUATED` evidence atomically. | `server/graph/governance.ts` |
 | Approval resolution | `MATCH` a `PENDING` approval and eligible active user, conditionally create `DECIDED`, set terminal fields once, and append evidence in one transaction. | `server/graph/governance.ts` |
 
-The history cursor is opaque to the client but is still attacker-controlled input, so the decoded payload is validated for meaning — canonical ISO-8601 timestamp and well-formed request ID — and rejected with a safe `BAD_REQUEST` **before** any database session is opened.
+### The four queries that carry the contract
+
+The queries below are quoted from source and reformatted onto multiple lines for readability; the modules store each as a single-line string. Property lists are elided with `...` where they are long and uninteresting.
+
+#### 1. Request creation — the invariant is structural, not defensive
+
+```cypher
+MATCH (agent:Agent {agentId: $agentId})
+MATCH (actionType:ActionType {actionTypeId: $actionTypeId})
+MATCH (resource:Resource {resourceId: $resourceId})
+CREATE (request:ActionRequest {
+  actionRequestId: $actionRequestId,
+  amount: $amount,
+  createdAt: $createdAt,
+  status: 'EVALUATED'
+})
+CREATE (agent)-[:REQUESTED]->(request)
+CREATE (request)-[:IS_TYPE]->(actionType)
+CREATE (request)-[:TOUCHES]->(resource)
+RETURN { ... } AS actionRequest
+```
+
+Three **required** `MATCH` clauses precede every `CREATE`. If the agent, action type, or resource does not exist, the pattern produces no rows and the query writes *nothing* — no half-linked request, no orphan to clean up afterwards. The exactly-one-`TOUCHES` rule is therefore a property of the write's shape rather than an application check that a future caller could bypass. It runs inside `executeWrite`, so all four creates commit or none do. The integration test `creates no orphaned ActionRequest when the resource does not exist` covers this path.
+
+#### 2. Approval resolution — eligibility and the single terminal decision
+
+```cypher
+MATCH (request:ActionRequest)-[:HAS_APPROVAL]->(approval:Approval {approvalId: $approvalId})
+      -[:ASSIGNED_TO]->(role:Role)
+MATCH (decider:User {userId: $deciderUserId, active: true})-[:HAS_ROLE]->(role)
+WITH request, approval, role, decider
+WHERE approval.status = 'PENDING'
+SET approval.status = $outcome,
+    approval.decidedAt = $decidedAt
+CREATE (decider)-[:DECIDED]->(approval)
+CREATE (evidence:Evidence { ..., eventType: 'APPROVAL_DECIDED', ... })
+CREATE (request)-[:GENERATES]->(evidence)
+RETURN ...
+```
+
+This one query enforces both governance rules through traversal instead of code:
+
+- **Eligibility.** The second `MATCH` binds `role` to the *same node* the approval is `ASSIGNED_TO`. A user can only decide an approval if they hold precisely that role and are `active`. There is no separate permission table to fall out of sync with the assignment.
+- **First terminal decision wins.** `WHERE approval.status = 'PENDING'` sits between the match and the `SET`, making the update a compare-and-set on the approval node. Two concurrent decisions contend for the same node; the loser finds a non-`PENDING` status, matches nothing, and writes nothing.
+
+Zero returned rows is deliberately ambiguous — already decided, or not eligible — so the caller disambiguates afterwards into `ApprovalConflictError` versus `ApprovalEligibilityError`, and neither leaks graph structure to the client. The integration test `allows only one concurrent terminal decision for a pending approval` exercises the race directly.
+
+#### 3. Decision evidence — conditional write in a single transaction
+
+```cypher
+MATCH (request:ActionRequest {actionRequestId: $actionRequestId})
+OPTIONAL MATCH (requiredRole:Role {roleId: $requiredRoleId})
+WITH request, requiredRole
+CREATE (evidence:Evidence {
+  ...,
+  eventType: 'DECISION_EVALUATED',
+  explanationSnapshotJson: $explanationSnapshotJson,
+  ...
+})
+CREATE (request)-[:GENERATES]->(evidence)
+FOREACH (_ IN CASE WHEN $requiresApproval AND requiredRole IS NOT NULL THEN [1] ELSE [] END |
+  CREATE (approval:Approval { ..., status: 'PENDING' })
+  CREATE (request)-[:HAS_APPROVAL]->(approval)
+  CREATE (approval)-[:ASSIGNED_TO]->(requiredRole)
+)
+RETURN ...
+```
+
+Cypher has no `IF`, so `FOREACH` over a list produced by `CASE` is the idiomatic conditional write: the body runs exactly once when an approval is required and zero times otherwise. The consequence that matters is atomicity — there is no window in which a recorded `APPROVAL_REQUIRED` decision exists without its pending approval, or vice versa.
+
+The versioned explanation snapshot is serialized into the evidence node **at write time**. That is what makes the audit trail truthful: a later policy edit changes future decisions but cannot retroactively alter what a past decision recorded, because audit reads deserialize the stored artifact rather than replaying the current graph. `Evidence` is only ever `CREATE`d — no code path issues `SET` or `DELETE` against it.
+
+#### 4. History paging — keyset, not `SKIP`/`OFFSET`
+
+```cypher
+MATCH (agent:Agent)-[:REQUESTED]->(request:ActionRequest)-[:IS_TYPE]->(actionType:ActionType)
+OPTIONAL MATCH (request)-[:TOUCHES]->(resource:Resource)-[:BELONGS_TO]->(customer:Customer)
+OPTIONAL MATCH (request)-[:HAS_APPROVAL]->(approval:Approval)
+CALL {
+  WITH request
+  OPTIONAL MATCH (request)-[:GENERATES]->(ev:Evidence)
+  RETURN ev ORDER BY ev.createdAt DESC, ev.evidenceId DESC LIMIT 1
+}
+WITH ...
+WHERE $cursorCreatedAt IS NULL
+   OR request.createdAt < $cursorCreatedAt
+   OR (request.createdAt = $cursorCreatedAt AND request.actionRequestId < $cursorId)
+RETURN ...
+ORDER BY request.createdAt DESC, request.actionRequestId DESC
+LIMIT toInteger($fetchLimit)
+```
+
+Four decisions are worth calling out:
+
+- **The compound predicate is a keyset (seek) cursor.** Unlike `SKIP`, its cost does not grow with page depth, and rows written during paging cannot shift a page boundary and produce a duplicate or a gap.
+- **`createdAt` is not unique.** The seed deliberately writes eight requests with an identical timestamp. `actionRequestId` therefore acts as the tiebreaker in both the `WHERE` and the `ORDER BY`, and the two must agree exactly or paging silently drops rows. The integration test `paginates without duplicates or gaps when timestamps match` exists to prove that specific hazard is handled.
+- **`toInteger($fetchLimit)`** is required because the driver transmits JavaScript numbers as floats and `LIMIT` demands an integer.
+- **The `CALL { ... }` subquery** selects only the newest evidence row per request, so a request with many evidence records contributes one row rather than multiplying the result set.
+
+The cursor is opaque to the client but is still attacker-controlled input. The decoded payload is validated for meaning — canonical ISO-8601 timestamp and well-formed request ID — and rejected with a safe `BAD_REQUEST` **before** a database session is ever opened.
 
 ## Testing and verification
 
