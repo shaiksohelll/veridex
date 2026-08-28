@@ -291,12 +291,18 @@ type CursorPayload = { c: string; id: string };
 /**
  * A cursor is opaque to the client but is still attacker-controlled input, so
  * the decoded payload is validated for meaning rather than only for shape.
- * Both patterns describe what this service itself issues: createdAt is written
- * with Date.prototype.toISOString, and an action request id is the literal
- * prefix "request-" followed by lowercase alphanumerics and hyphens.
+ * Both patterns describe exactly what this service itself issues: createdAt is
+ * always written with Date.prototype.toISOString, and an action request id is
+ * the literal prefix "request-" followed by lowercase alphanumerics and hyphens.
+ *
+ * The timestamp pattern deliberately accepts only the canonical
+ * "YYYY-MM-DDTHH:mm:ss.sssZ" form. The keyset comparison below compares the
+ * cursor timestamp as a string against stored createdAt values, so the same
+ * instant expressed with a UTC offset or with fewer fractional digits would
+ * order incorrectly and silently omit requests at the page boundary. Date.parse
+ * still rejects values that match the shape without being real instants.
  */
-const CURSOR_TIMESTAMP_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+const CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CURSOR_ID_PATTERN = /^request-[a-z0-9][a-z0-9-]{0,63}$/;
 
 function isValidCursorTimestamp(value: string): boolean {
