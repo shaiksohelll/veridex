@@ -48,20 +48,17 @@ describe("veridex tRPC integration", () => {
   );
 
   it.runIf(hasCognoDbCredentials)(
-    "returns a domain-level blocked decision when a valid resource ID is absent",
+    "rejects with NOT_FOUND and creates no orphaned request when the resource does not exist",
     async () => {
       const caller = appRouter.createCaller(context());
-      const result = await caller.veridex.evaluate({
-        actionTypeId: "action-issue-refund",
-        agentId: "agent-billing-assistant",
-        amount: 240,
-        resourceId: "resource-does-not-exist",
-      });
-
-      expect(result.decision).toMatchObject({
-        reasonCode: "RESOURCE_NOT_FOUND",
-        verdict: "BLOCKED",
-      });
+      await expect(
+        caller.veridex.evaluate({
+          actionTypeId: "action-issue-refund",
+          agentId: "agent-billing-assistant",
+          amount: 240,
+          resourceId: "resource-does-not-exist",
+        }),
+      ).rejects.toMatchObject<Partial<TRPCError>>({ code: "NOT_FOUND" });
     },
     15_000
   );
@@ -251,7 +248,107 @@ describe("veridex tRPC integration", () => {
     ).rejects.toMatchObject<Partial<TRPCError>>({ code: "BAD_REQUEST" });
   });
 
+  it.runIf(hasCognoDbCredentials)(
+    "creates no orphaned ActionRequest when the resource does not exist",
+    async () => {
+      const session = getCognoDbDriver().session();
+      try {
+        const before = await session.run(
+          "MATCH (request:ActionRequest) RETURN count(request) AS total",
+        );
+        const countBefore = before.records[0]?.get("total") as number;
+
+        const caller = appRouter.createCaller(context());
+        await expect(
+          caller.veridex.evaluate({
+            actionTypeId: "action-issue-refund",
+            agentId: "agent-billing-assistant",
+            amount: 240,
+            resourceId: "resource-does-not-exist",
+          }),
+        ).rejects.toThrow();
+
+        const after = await session.run(
+          "MATCH (request:ActionRequest) RETURN count(request) AS total",
+        );
+        const countAfter = after.records[0]?.get("total") as number;
+        expect(countAfter).toBe(countBefore);
+      } finally {
+        await session.close();
+      }
+    },
+    15_000,
+  );
+
+  it.runIf(hasCognoDbCredentials)(
+    "lists seeded action requests with correct structure and ordering",
+    async () => {
+      const caller = appRouter.createCaller(context());
+      const result = await caller.veridex.listRequests({ limit: 50 });
+
+      expect(result.items.length).toBeGreaterThan(0);
+      // Every item has required fields
+      for (const item of result.items) {
+        expect(item.actionRequestId).toBeTruthy();
+        expect(item.actionTypeId).toBeTruthy();
+        expect(item.agentId).toBeTruthy();
+        expect(typeof item.amount).toBe("number");
+        expect(item.createdAt).toBeTruthy();
+      }
+      // Verify newest-first ordering
+      for (let i = 1; i < result.items.length; i++) {
+        const current = result.items[i]!;
+        const previous = result.items[i - 1]!;
+        const cmp = previous.createdAt.localeCompare(current.createdAt);
+        expect(cmp).toBeGreaterThanOrEqual(0);
+      }
+    },
+    15_000,
+  );
+
+  it.runIf(hasCognoDbCredentials)(
+    "shows the terminal approval status for historically resolved requests",
+    async () => {
+      const caller = appRouter.createCaller(context());
+      const result = await caller.veridex.listRequests({ limit: 200 });
+      const historical = result.items.find(
+        (item) => item.actionRequestId === "request-historical-approved-refund",
+      );
+      expect(historical).toBeDefined();
+      expect(historical?.approvalStatus).toBe("APPROVED");
+      expect(historical?.latestVerdict).toBeTruthy();
+    },
+    15_000,
+  );
+
+  it.runIf(hasCognoDbCredentials)(
+    "paginates without duplicates or gaps when timestamps match",
+    async () => {
+      const caller = appRouter.createCaller(context());
+      // Fetch all in small pages to verify no duplicates
+      const allIds = new Set<string>();
+      let cursor: string | undefined;
+      let pages = 0;
+      do {
+        const page = await caller.veridex.listRequests({ cursor, limit: 2 });
+        for (const item of page.items) {
+          expect(allIds.has(item.actionRequestId)).toBe(false);
+          allIds.add(item.actionRequestId);
+        }
+        cursor = page.nextCursor;
+        pages++;
+        if (pages > 50) break; // safety
+      } while (cursor);
+
+      // All in one page should match total collected
+      const full = await caller.veridex.listRequests({ limit: 200 });
+      expect(allIds.size).toBe(full.items.length);
+    },
+    30_000,
+  );
+
   afterAll(async () => {
     await closeCognoDbDriver();
   });
 });
+

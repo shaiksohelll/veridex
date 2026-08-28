@@ -317,3 +317,30 @@ describe("evaluateDecision", () => {
     });
   });
 });
+
+describe("keyset cursor encoding", () => {
+  it("round-trips createdAt and actionRequestId without data loss", async () => {
+    const { encodeCursor, decodeCursor } = await import("../graph/repository");
+    const encoded = encodeCursor("2026-08-27T00:00:00.000Z", "request-abc");
+    const decoded = decodeCursor(encoded);
+    expect(decoded).toEqual({ c: "2026-08-27T00:00:00.000Z", id: "request-abc" });
+  });
+
+  it("rejects malformed or empty cursor strings gracefully", async () => {
+    const { decodeCursor } = await import("../graph/repository");
+    expect(decodeCursor("not-valid-base64!@#")).toBeNull();
+    expect(decodeCursor("")).toBeNull();
+    expect(decodeCursor(Buffer.from("{}").toString("base64url"))).toBeNull();
+    expect(decodeCursor(Buffer.from("{\"c\":123}").toString("base64url"))).toBeNull();
+  });
+
+  it("produces distinct cursors when timestamps match but IDs differ", async () => {
+    const { encodeCursor } = await import("../graph/repository");
+    const ts = "2026-08-27T00:00:00.000Z";
+    const cursorA = encodeCursor(ts, "request-aaa");
+    const cursorB = encodeCursor(ts, "request-bbb");
+    expect(cursorA).not.toBe(cursorB);
+  });
+});
+
+

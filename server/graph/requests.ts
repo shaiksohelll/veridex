@@ -42,7 +42,7 @@ export async function createActionRequest(
   try {
     const result = await session.executeWrite(async (transaction) => {
       const write = await transaction.run(
-        "MATCH (agent:Agent {agentId: $agentId}) MATCH (actionType:ActionType {actionTypeId: $actionTypeId}) OPTIONAL MATCH (resource:Resource {resourceId: $resourceId}) CREATE (request:ActionRequest {actionRequestId: $actionRequestId, amount: $amount, createdAt: $createdAt, status: 'EVALUATED'}) CREATE (agent)-[:REQUESTED]->(request) CREATE (request)-[:IS_TYPE]->(actionType) FOREACH (_ IN CASE WHEN resource IS NULL THEN [] ELSE [1] END | CREATE (request)-[:TOUCHES]->(resource)) RETURN {actionRequestId: request.actionRequestId, amount: request.amount, createdAt: request.createdAt, status: request.status} AS actionRequest",
+        "MATCH (agent:Agent {agentId: $agentId}) MATCH (actionType:ActionType {actionTypeId: $actionTypeId}) MATCH (resource:Resource {resourceId: $resourceId}) CREATE (request:ActionRequest {actionRequestId: $actionRequestId, amount: $amount, createdAt: $createdAt, status: 'EVALUATED'}) CREATE (agent)-[:REQUESTED]->(request) CREATE (request)-[:IS_TYPE]->(actionType) CREATE (request)-[:TOUCHES]->(resource) RETURN {actionRequestId: request.actionRequestId, amount: request.amount, createdAt: request.createdAt, status: request.status} AS actionRequest",
         { ...input, actionRequestId, createdAt },
       );
       return write.records[0] ? get<ActionRequestFact>(write.records[0], "actionRequest") : null;

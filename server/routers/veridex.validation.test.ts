@@ -85,4 +85,22 @@ describe("Veridex validation responses", () => {
     });
     expectSafeValidationPayload(response.body, response.status);
   });
+
+  it("sanitizes invalid listRequests input", async () => {
+    const negativeLimit = await invalidQuery("veridex.listRequests", {
+      limit: -1,
+    });
+    expectSafeValidationPayload(negativeLimit.body, negativeLimit.status);
+
+    const zeroLimit = await invalidQuery("veridex.listRequests", {
+      limit: 0,
+    });
+    expectSafeValidationPayload(zeroLimit.body, zeroLimit.status);
+
+    const exceedsMax = await invalidQuery("veridex.listRequests", {
+      limit: 999,
+    });
+    expectSafeValidationPayload(exceedsMax.body, exceedsMax.status);
+  });
 });
+
