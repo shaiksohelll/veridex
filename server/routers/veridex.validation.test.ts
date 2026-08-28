@@ -102,5 +102,21 @@ describe("Veridex validation responses", () => {
     });
     expectSafeValidationPayload(exceedsMax.body, exceedsMax.status);
   });
-});
 
+  it("rejects malformed opaque cursors with BAD_REQUEST", async () => {
+    const garbageCursor = await invalidQuery("veridex.listRequests", {
+      cursor: "not-valid-base64!@#$",
+    });
+    expectSafeValidationPayload(garbageCursor.body, garbageCursor.status);
+
+    const emptyJsonCursor = await invalidQuery("veridex.listRequests", {
+      cursor: Buffer.from("{}").toString("base64url"),
+    });
+    expectSafeValidationPayload(emptyJsonCursor.body, emptyJsonCursor.status);
+
+    const truncatedCursor = await invalidQuery("veridex.listRequests", {
+      cursor: Buffer.from('{"c":123}').toString("base64url"),
+    });
+    expectSafeValidationPayload(truncatedCursor.body, truncatedCursor.status);
+  });
+});

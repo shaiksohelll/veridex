@@ -311,6 +311,12 @@ export async function listActionRequests(
   input: { cursor?: string; limit: number },
 ): Promise<{ items: ActionRequestSummary[]; nextCursor?: string }> {
   const session = driverSession(driver);
+  if (input.cursor !== undefined) {
+    const decoded = decodeCursor(input.cursor);
+    if (!decoded) {
+      throw new Error("INVALID_CURSOR");
+    }
+  }
   const decoded = input.cursor ? decodeCursor(input.cursor) : null;
   const fetchLimit = input.limit + 1;
 
@@ -343,7 +349,7 @@ export async function listActionRequests(
               ev.reasonCode AS latestReasonCode,
               approval.status AS approvalStatus
        ORDER BY request.createdAt DESC, request.actionRequestId DESC
-       LIMIT $fetchLimit`,
+       LIMIT toInteger($fetchLimit)`,
       {
         cursorCreatedAt: decoded?.c ?? null,
         cursorId: decoded?.id ?? null,
@@ -382,4 +388,3 @@ export async function listActionRequests(
     await session.close();
   }
 }
-

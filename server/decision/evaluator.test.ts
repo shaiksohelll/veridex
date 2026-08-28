@@ -342,5 +342,3 @@ describe("keyset cursor encoding", () => {
     expect(cursorA).not.toBe(cursorB);
   });
 });
-
-

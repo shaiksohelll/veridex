@@ -11,7 +11,7 @@ import {
   loadEvidence,
   recordDecisionEvidence,
 } from "../graph/governance";
-import { listActionRequests, loadEvaluationGraphFacts } from "../graph/repository";
+import { decodeCursor, listActionRequests, loadEvaluationGraphFacts } from "../graph/repository";
 import { createActionRequest, loadEvaluationMetadata } from "../graph/requests";
 import { publicProcedure, router } from "../_core/trpc";
 
@@ -169,6 +169,13 @@ export const veridexRouter = router({
         .default({ limit: 50 }),
     )
     .query(async ({ input }) => {
+      if (input.cursor !== undefined && !decodeCursor(input.cursor)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Invalid request. Check the supplied values and try again.",
+        });
+      }
       try {
         return await listActionRequests(getCognoDbDriver(), {
           cursor: input.cursor,

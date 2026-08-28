@@ -351,4 +351,3 @@ describe("veridex tRPC integration", () => {
     await closeCognoDbDriver();
   });
 });
-
