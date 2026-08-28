@@ -203,6 +203,10 @@ The deployment artifact is the existing Vite client plus bundled Node/Express se
 
 Use `GET /healthz` for a liveness probe; it returns `200 {"status":"ok"}` without contacting CognoDB. Use `GET /readyz` for a readiness probe; it verifies CognoDB connectivity and returns `200 {"status":"ready"}` or the non-sensitive `503 {"status":"unavailable"}`. Request bodies are limited to 100 KB because the public API accepts compact authorization inputs only.
 
+### Render deployment
+
+`render.yaml` provisions a free Docker web service in Singapore and deploys `main` only after GitHub checks pass. It uses `/healthz` for process health and deliberately leaves `COGNODB_URI`, `COGNODB_USERNAME`, and `COGNODB_PASSWORD` as setup-time secrets. After providing those values, apply the schema and idempotent demo seed from a trusted environment with `pnpm graph:schema` and `pnpm graph:seed`; do not commit the credentials.
+
 ## Limitations and next steps
 
 This is a focused take-home MVP. It intentionally supports one resource per request, demo-only identities, one active approval role per applicable approval policy, and a compact fixed seed universe. It has no production authentication/authorization administration, tenant isolation, notification/queue worker, policy authoring UI, policy impact analysis, simulation, retention controls, or real-world identity provisioning.
