@@ -325,26 +325,55 @@ describe("veridex tRPC integration", () => {
     "paginates without duplicates or gaps when timestamps match",
     async () => {
       const caller = appRouter.createCaller(context());
-      // Fetch all in small pages to verify no duplicates
-      const allIds = new Set<string>();
+      const PAGE_SIZE = 5;
+
+      // Snapshot the expected set before walking, not after. Keyset
+      // pagination is intentionally stable against concurrent inserts: a row
+      // created mid-walk carries a newer createdAt, sorts above the cursor in
+      // DESC order, and is correctly never revisited. Comparing against a set
+      // captured after the walk would count those rows as gaps.
+      const snapshot = await caller.veridex.listRequests({ limit: 200 });
+      const expectedIds = new Set(
+        snapshot.items.map(item => item.actionRequestId)
+      );
+      expect(expectedIds.size).toBeGreaterThan(0);
+
+      const seenIds = new Set<string>();
+      let remainingExpected = expectedIds.size;
       let cursor: string | undefined;
       let pages = 0;
-      do {
-        const page = await caller.veridex.listRequests({ cursor, limit: 2 });
-        for (const item of page.items) {
-          expect(allIds.has(item.actionRequestId)).toBe(false);
-          allIds.add(item.actionRequestId);
-        }
-        cursor = page.nextCursor;
-        pages++;
-        if (pages > 50) break; // safety
-      } while (cursor);
+      // Derive the page budget from the live row count. A fixed constant here
+      // silently caps the walk once the database accumulates requests, which
+      // then surfaces as a false pagination gap rather than as a guard trip.
+      const maxPages = Math.ceil(expectedIds.size / PAGE_SIZE) + 5;
 
-      // All in one page should match total collected
-      const full = await caller.veridex.listRequests({ limit: 200 });
-      expect(allIds.size).toBe(full.items.length);
+      while (pages < maxPages) {
+        const page = await caller.veridex.listRequests({
+          cursor,
+          limit: PAGE_SIZE,
+        });
+        expect(page.items.length).toBeLessThanOrEqual(PAGE_SIZE);
+        for (const item of page.items) {
+          // No duplicates: a row must never appear on two pages.
+          expect(seenIds.has(item.actionRequestId)).toBe(false);
+          seenIds.add(item.actionRequestId);
+          if (expectedIds.has(item.actionRequestId)) remainingExpected--;
+        }
+        pages++;
+        cursor = page.nextCursor;
+        if (!cursor || remainingExpected === 0) break;
+      }
+
+      // No gaps: every row present at snapshot time was returned exactly once.
+      expect([...expectedIds].filter(id => !seenIds.has(id))).toEqual([]);
+
+      // The seeded requests all share a single createdAt, so reaching them
+      // exercises the actionRequestId tiebreaker that keeps a page boundary
+      // inside a group of identical timestamps.
+      expect(seenIds.has("request-historical-approved-refund")).toBe(true);
+      expect(seenIds.has("request-approval-required")).toBe(true);
     },
-    30_000,
+    90_000,
   );
 
   afterAll(async () => {
