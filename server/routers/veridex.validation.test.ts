@@ -46,12 +46,17 @@ async function invalidMutation(path: string, input: unknown) {
   return { body: await response.json(), status: response.status };
 }
 
+function encodeCursorPayload(payload: unknown) {
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
+const SAFE_VALIDATION_MESSAGE =
+  "Invalid request. Check the supplied values and try again.";
+
 function expectSafeValidationPayload(body: unknown, status: number) {
   expect(status).toBe(400);
   const serialised = JSON.stringify(body);
-  expect(serialised).toContain(
-    "Invalid request. Check the supplied values and try again."
-  );
+  expect(serialised).toContain(SAFE_VALIDATION_MESSAGE);
   expect(serialised).not.toMatch(/Zod|regex|pattern|stack|invalid_format/i);
 }
 
@@ -118,5 +123,55 @@ describe("Veridex validation responses", () => {
       cursor: Buffer.from('{"c":123}').toString("base64url"),
     });
     expectSafeValidationPayload(truncatedCursor.body, truncatedCursor.status);
+  });
+
+  it("rejects semantically invalid cursor payloads before any database access", async () => {
+    const partialTimestamp = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({ c: "9999", id: "x" }),
+    });
+    expectSafeValidationPayload(partialTimestamp.body, partialTimestamp.status);
+
+    const emptyRequestId = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.000Z",
+        id: "",
+      }),
+    });
+    expectSafeValidationPayload(emptyRequestId.body, emptyRequestId.status);
+
+    const unparseableRequestId = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.000Z",
+        id: "not a request id",
+      }),
+    });
+    expectSafeValidationPayload(
+      unparseableRequestId.body,
+      unparseableRequestId.status
+    );
+
+    const impossibleCalendarDate = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-13-45T00:00:00.000Z",
+        id: "request-abc123def456",
+      }),
+    });
+    expectSafeValidationPayload(
+      impossibleCalendarDate.body,
+      impossibleCalendarDate.status
+    );
+  });
+
+  it("does not report a well-formed cursor as a validation error", async () => {
+    const wellFormed = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.000Z",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expect(wellFormed.status).not.toBe(400);
+    expect(JSON.stringify(wellFormed.body)).not.toContain(
+      SAFE_VALIDATION_MESSAGE
+    );
   });
 });
