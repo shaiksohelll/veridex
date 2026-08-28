@@ -288,6 +288,21 @@ export type ActionRequestSummary = {
 
 type CursorPayload = { c: string; id: string };
 
+/**
+ * A cursor is opaque to the client but is still attacker-controlled input, so
+ * the decoded payload is validated for meaning rather than only for shape.
+ * Both patterns describe what this service itself issues: createdAt is written
+ * with Date.prototype.toISOString, and an action request id is the literal
+ * prefix "request-" followed by lowercase alphanumerics and hyphens.
+ */
+const CURSOR_TIMESTAMP_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+const CURSOR_ID_PATTERN = /^request-[a-z0-9][a-z0-9-]{0,63}$/;
+
+function isValidCursorTimestamp(value: string): boolean {
+  return CURSOR_TIMESTAMP_PATTERN.test(value) && !Number.isNaN(Date.parse(value));
+}
+
 export function encodeCursor(createdAt: string, actionRequestId: string): string {
   const payload: CursorPayload = { c: createdAt, id: actionRequestId };
   return Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -297,10 +312,10 @@ export function decodeCursor(cursor: string): CursorPayload | null {
   try {
     const raw = Buffer.from(cursor, "base64url").toString("utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed.c === "string" && typeof parsed.id === "string") {
-      return { c: parsed.c, id: parsed.id };
-    }
-    return null;
+    if (typeof parsed.c !== "string" || typeof parsed.id !== "string") return null;
+    if (!isValidCursorTimestamp(parsed.c)) return null;
+    if (!CURSOR_ID_PATTERN.test(parsed.id)) return null;
+    return { c: parsed.c, id: parsed.id };
   } catch {
     return null;
   }
@@ -310,22 +325,24 @@ export async function listActionRequests(
   driver: Driver,
   input: { cursor?: string; limit: number },
 ): Promise<{ items: ActionRequestSummary[]; nextCursor?: string }> {
-  const session = driverSession(driver);
+  let decoded: CursorPayload | null = null;
   if (input.cursor !== undefined) {
-    const decoded = decodeCursor(input.cursor);
+    decoded = decodeCursor(input.cursor);
     if (!decoded) {
       throw new Error("INVALID_CURSOR");
     }
   }
-  const decoded = input.cursor ? decodeCursor(input.cursor) : null;
+
   const fetchLimit = input.limit + 1;
+  const session = driverSession(driver);
 
   try {
     const result = await session.run(
       `MATCH (agent:Agent)-[:REQUESTED]->(request:ActionRequest)-[:IS_TYPE]->(actionType:ActionType)
        OPTIONAL MATCH (request)-[:TOUCHES]->(resource:Resource)-[:BELONGS_TO]->(customer:Customer)
        OPTIONAL MATCH (request)-[:HAS_APPROVAL]->(approval:Approval)
-       CALL (request) {
+       CALL {
+         WITH request
          OPTIONAL MATCH (request)-[:GENERATES]->(ev:Evidence)
          RETURN ev ORDER BY ev.createdAt DESC, ev.evidenceId DESC LIMIT 1
        }
