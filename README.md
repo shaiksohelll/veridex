@@ -201,6 +201,8 @@ The project is connected to a private GitHub repository with a small, reviewable
 
 The deployment artifact is the existing Vite client plus bundled Node/Express server produced by `pnpm build`. A production host must provide the four `COGNODB_*` secrets and reach CognoDB over Bolt. The current project uses managed autoscale hosting; publishing remains a user-controlled UI action and has not been performed by the application workflow.
 
+Use `GET /healthz` for a liveness probe; it returns `200 {"status":"ok"}` without contacting CognoDB. Use `GET /readyz` for a readiness probe; it verifies CognoDB connectivity and returns `200 {"status":"ready"}` or the non-sensitive `503 {"status":"unavailable"}`. Request bodies are limited to 100 KB because the public API accepts compact authorization inputs only.
+
 ## Limitations and next steps
 
 This is a focused take-home MVP. It intentionally supports one resource per request, demo-only identities, one active approval role per applicable approval policy, and a compact fixed seed universe. It has no production authentication/authorization administration, tenant isolation, notification/queue worker, policy authoring UI, policy impact analysis, simulation, retention controls, or real-world identity provisioning.
