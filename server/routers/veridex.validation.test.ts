@@ -46,12 +46,17 @@ async function invalidMutation(path: string, input: unknown) {
   return { body: await response.json(), status: response.status };
 }
 
+function encodeCursorPayload(payload: unknown) {
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
+const SAFE_VALIDATION_MESSAGE =
+  "Invalid request. Check the supplied values and try again.";
+
 function expectSafeValidationPayload(body: unknown, status: number) {
   expect(status).toBe(400);
   const serialised = JSON.stringify(body);
-  expect(serialised).toContain(
-    "Invalid request. Check the supplied values and try again."
-  );
+  expect(serialised).toContain(SAFE_VALIDATION_MESSAGE);
   expect(serialised).not.toMatch(/Zod|regex|pattern|stack|invalid_format/i);
 }
 
@@ -84,5 +89,128 @@ describe("Veridex validation responses", () => {
       outcome: "MAYBE",
     });
     expectSafeValidationPayload(response.body, response.status);
+  });
+
+  it("sanitizes invalid listRequests input", async () => {
+    const negativeLimit = await invalidQuery("veridex.listRequests", {
+      limit: -1,
+    });
+    expectSafeValidationPayload(negativeLimit.body, negativeLimit.status);
+
+    const zeroLimit = await invalidQuery("veridex.listRequests", {
+      limit: 0,
+    });
+    expectSafeValidationPayload(zeroLimit.body, zeroLimit.status);
+
+    const exceedsMax = await invalidQuery("veridex.listRequests", {
+      limit: 999,
+    });
+    expectSafeValidationPayload(exceedsMax.body, exceedsMax.status);
+  });
+
+  it("rejects malformed opaque cursors with BAD_REQUEST", async () => {
+    const garbageCursor = await invalidQuery("veridex.listRequests", {
+      cursor: "not-valid-base64!@#$",
+    });
+    expectSafeValidationPayload(garbageCursor.body, garbageCursor.status);
+
+    const emptyJsonCursor = await invalidQuery("veridex.listRequests", {
+      cursor: Buffer.from("{}").toString("base64url"),
+    });
+    expectSafeValidationPayload(emptyJsonCursor.body, emptyJsonCursor.status);
+
+    const truncatedCursor = await invalidQuery("veridex.listRequests", {
+      cursor: Buffer.from('{"c":123}').toString("base64url"),
+    });
+    expectSafeValidationPayload(truncatedCursor.body, truncatedCursor.status);
+  });
+
+  it("rejects semantically invalid cursor payloads before any database access", async () => {
+    const partialTimestamp = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({ c: "9999", id: "x" }),
+    });
+    expectSafeValidationPayload(partialTimestamp.body, partialTimestamp.status);
+
+    const emptyRequestId = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.000Z",
+        id: "",
+      }),
+    });
+    expectSafeValidationPayload(emptyRequestId.body, emptyRequestId.status);
+
+    const unparseableRequestId = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.000Z",
+        id: "not a request id",
+      }),
+    });
+    expectSafeValidationPayload(
+      unparseableRequestId.body,
+      unparseableRequestId.status
+    );
+
+    const impossibleCalendarDate = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-13-45T00:00:00.000Z",
+        id: "request-abc123def456",
+      }),
+    });
+    expectSafeValidationPayload(
+      impossibleCalendarDate.body,
+      impossibleCalendarDate.status
+    );
+  });
+
+  /**
+   * Each timestamp below is a valid ISO-8601 instant, so Date.parse accepts it,
+   * but none matches a stored createdAt value byte for byte. The keyset filter
+   * compares the cursor timestamp as a string, so accepting these would place
+   * the boundary in the wrong position and silently drop requests from the
+   * audit history rather than failing loudly.
+   */
+  it("rejects non-canonical cursor timestamps that would break keyset ordering", async () => {
+    const utcOffset = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T05:30:00.000+05:30",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expectSafeValidationPayload(utcOffset.body, utcOffset.status);
+
+    const twoFractionalDigits = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.00Z",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expectSafeValidationPayload(
+      twoFractionalDigits.body,
+      twoFractionalDigits.status
+    );
+
+    const noFractionalDigits = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00Z",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expectSafeValidationPayload(
+      noFractionalDigits.body,
+      noFractionalDigits.status
+    );
+  });
+
+  it("does not report a well-formed cursor as a validation error", async () => {
+    const wellFormed = await invalidQuery("veridex.listRequests", {
+      cursor: encodeCursorPayload({
+        c: "2026-08-28T00:00:00.000Z",
+        id: "request-historical-approved-refund",
+      }),
+    });
+    expect(wellFormed.status).not.toBe(400);
+    expect(JSON.stringify(wellFormed.body)).not.toContain(
+      SAFE_VALIDATION_MESSAGE
+    );
   });
 });

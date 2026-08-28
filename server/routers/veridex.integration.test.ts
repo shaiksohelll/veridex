@@ -48,20 +48,17 @@ describe("veridex tRPC integration", () => {
   );
 
   it.runIf(hasCognoDbCredentials)(
-    "returns a domain-level blocked decision when a valid resource ID is absent",
+    "rejects with NOT_FOUND and creates no orphaned request when the resource does not exist",
     async () => {
       const caller = appRouter.createCaller(context());
-      const result = await caller.veridex.evaluate({
-        actionTypeId: "action-issue-refund",
-        agentId: "agent-billing-assistant",
-        amount: 240,
-        resourceId: "resource-does-not-exist",
-      });
-
-      expect(result.decision).toMatchObject({
-        reasonCode: "RESOURCE_NOT_FOUND",
-        verdict: "BLOCKED",
-      });
+      await expect(
+        caller.veridex.evaluate({
+          actionTypeId: "action-issue-refund",
+          agentId: "agent-billing-assistant",
+          amount: 240,
+          resourceId: "resource-does-not-exist",
+        }),
+      ).rejects.toMatchObject<Partial<TRPCError>>({ code: "NOT_FOUND" });
     },
     15_000
   );
@@ -250,6 +247,134 @@ describe("veridex tRPC integration", () => {
       })
     ).rejects.toMatchObject<Partial<TRPCError>>({ code: "BAD_REQUEST" });
   });
+
+  it.runIf(hasCognoDbCredentials)(
+    "creates no orphaned ActionRequest when the resource does not exist",
+    async () => {
+      const session = getCognoDbDriver().session();
+      try {
+        const before = await session.run(
+          "MATCH (request:ActionRequest) RETURN count(request) AS total",
+        );
+        const countBefore = before.records[0]?.get("total") as number;
+
+        const caller = appRouter.createCaller(context());
+        await expect(
+          caller.veridex.evaluate({
+            actionTypeId: "action-issue-refund",
+            agentId: "agent-billing-assistant",
+            amount: 240,
+            resourceId: "resource-does-not-exist",
+          }),
+        ).rejects.toThrow();
+
+        const after = await session.run(
+          "MATCH (request:ActionRequest) RETURN count(request) AS total",
+        );
+        const countAfter = after.records[0]?.get("total") as number;
+        expect(countAfter).toBe(countBefore);
+      } finally {
+        await session.close();
+      }
+    },
+    15_000,
+  );
+
+  it.runIf(hasCognoDbCredentials)(
+    "lists seeded action requests with correct structure and ordering",
+    async () => {
+      const caller = appRouter.createCaller(context());
+      const result = await caller.veridex.listRequests({ limit: 50 });
+
+      expect(result.items.length).toBeGreaterThan(0);
+      // Every item has required fields
+      for (const item of result.items) {
+        expect(item.actionRequestId).toBeTruthy();
+        expect(item.actionTypeId).toBeTruthy();
+        expect(item.agentId).toBeTruthy();
+        expect(typeof item.amount).toBe("number");
+        expect(item.createdAt).toBeTruthy();
+      }
+      // Verify newest-first ordering
+      for (let i = 1; i < result.items.length; i++) {
+        const current = result.items[i]!;
+        const previous = result.items[i - 1]!;
+        const cmp = previous.createdAt.localeCompare(current.createdAt);
+        expect(cmp).toBeGreaterThanOrEqual(0);
+      }
+    },
+    15_000,
+  );
+
+  it.runIf(hasCognoDbCredentials)(
+    "shows the terminal approval status for historically resolved requests",
+    async () => {
+      const caller = appRouter.createCaller(context());
+      const result = await caller.veridex.listRequests({ limit: 200 });
+      const historical = result.items.find(
+        (item) => item.actionRequestId === "request-historical-approved-refund",
+      );
+      expect(historical).toBeDefined();
+      expect(historical?.approvalStatus).toBe("APPROVED");
+      expect(historical?.latestVerdict).toBeTruthy();
+    },
+    15_000,
+  );
+
+  it.runIf(hasCognoDbCredentials)(
+    "paginates without duplicates or gaps when timestamps match",
+    async () => {
+      const caller = appRouter.createCaller(context());
+      const PAGE_SIZE = 5;
+
+      // Snapshot the expected set before walking, not after. Keyset
+      // pagination is intentionally stable against concurrent inserts: a row
+      // created mid-walk carries a newer createdAt, sorts above the cursor in
+      // DESC order, and is correctly never revisited. Comparing against a set
+      // captured after the walk would count those rows as gaps.
+      const snapshot = await caller.veridex.listRequests({ limit: 200 });
+      const expectedIds = new Set(
+        snapshot.items.map(item => item.actionRequestId)
+      );
+      expect(expectedIds.size).toBeGreaterThan(0);
+
+      const seenIds = new Set<string>();
+      let remainingExpected = expectedIds.size;
+      let cursor: string | undefined;
+      let pages = 0;
+      // Derive the page budget from the live row count. A fixed constant here
+      // silently caps the walk once the database accumulates requests, which
+      // then surfaces as a false pagination gap rather than as a guard trip.
+      const maxPages = Math.ceil(expectedIds.size / PAGE_SIZE) + 5;
+
+      while (pages < maxPages) {
+        const page = await caller.veridex.listRequests({
+          cursor,
+          limit: PAGE_SIZE,
+        });
+        expect(page.items.length).toBeLessThanOrEqual(PAGE_SIZE);
+        for (const item of page.items) {
+          // No duplicates: a row must never appear on two pages.
+          expect(seenIds.has(item.actionRequestId)).toBe(false);
+          seenIds.add(item.actionRequestId);
+          if (expectedIds.has(item.actionRequestId)) remainingExpected--;
+        }
+        pages++;
+        cursor = page.nextCursor;
+        if (!cursor || remainingExpected === 0) break;
+      }
+
+      // No gaps: every row present at snapshot time was returned exactly once.
+      expect([...expectedIds].filter(id => !seenIds.has(id))).toEqual([]);
+
+      // The seeded requests all share a single createdAt, so reaching them
+      // exercises the actionRequestId tiebreaker that keeps a page boundary
+      // inside a group of identical timestamps.
+      expect(seenIds.has("request-historical-approved-refund")).toBe(true);
+      expect(seenIds.has("request-approval-required")).toBe(true);
+    },
+    90_000,
+  );
 
   afterAll(async () => {
     await closeCognoDbDriver();

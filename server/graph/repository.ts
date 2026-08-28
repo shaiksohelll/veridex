@@ -267,3 +267,147 @@ export async function loadEvaluationGraphFacts(
     policies,
   };
 }
+
+export type ActionRequestSummary = {
+  actionRequestId: string;
+  actionTypeId: string;
+  actionTypeName: string;
+  agentId: string;
+  agentName: string;
+  amount: number;
+  approvalStatus?: string;
+  createdAt: string;
+  customerId?: string;
+  customerName?: string;
+  latestReasonCode?: string;
+  latestVerdict?: string;
+  resourceId?: string;
+  resourceName?: string;
+  status: string;
+};
+
+type CursorPayload = { c: string; id: string };
+
+/**
+ * A cursor is opaque to the client but is still attacker-controlled input, so
+ * the decoded payload is validated for meaning rather than only for shape.
+ * Both patterns describe exactly what this service itself issues: createdAt is
+ * always written with Date.prototype.toISOString, and an action request id is
+ * the literal prefix "request-" followed by lowercase alphanumerics and hyphens.
+ *
+ * The timestamp pattern deliberately accepts only the canonical
+ * "YYYY-MM-DDTHH:mm:ss.sssZ" form. The keyset comparison below compares the
+ * cursor timestamp as a string against stored createdAt values, so the same
+ * instant expressed with a UTC offset or with fewer fractional digits would
+ * order incorrectly and silently omit requests at the page boundary. Date.parse
+ * still rejects values that match the shape without being real instants.
+ */
+const CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const CURSOR_ID_PATTERN = /^request-[a-z0-9][a-z0-9-]{0,63}$/;
+
+function isValidCursorTimestamp(value: string): boolean {
+  return CURSOR_TIMESTAMP_PATTERN.test(value) && !Number.isNaN(Date.parse(value));
+}
+
+export function encodeCursor(createdAt: string, actionRequestId: string): string {
+  const payload: CursorPayload = { c: createdAt, id: actionRequestId };
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
+export function decodeCursor(cursor: string): CursorPayload | null {
+  try {
+    const raw = Buffer.from(cursor, "base64url").toString("utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed.c !== "string" || typeof parsed.id !== "string") return null;
+    if (!isValidCursorTimestamp(parsed.c)) return null;
+    if (!CURSOR_ID_PATTERN.test(parsed.id)) return null;
+    return { c: parsed.c, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
+export async function listActionRequests(
+  driver: Driver,
+  input: { cursor?: string; limit: number },
+): Promise<{ items: ActionRequestSummary[]; nextCursor?: string }> {
+  let decoded: CursorPayload | null = null;
+  if (input.cursor !== undefined) {
+    decoded = decodeCursor(input.cursor);
+    if (!decoded) {
+      throw new Error("INVALID_CURSOR");
+    }
+  }
+
+  const fetchLimit = input.limit + 1;
+  const session = driverSession(driver);
+
+  try {
+    const result = await session.run(
+      `MATCH (agent:Agent)-[:REQUESTED]->(request:ActionRequest)-[:IS_TYPE]->(actionType:ActionType)
+       OPTIONAL MATCH (request)-[:TOUCHES]->(resource:Resource)-[:BELONGS_TO]->(customer:Customer)
+       OPTIONAL MATCH (request)-[:HAS_APPROVAL]->(approval:Approval)
+       CALL {
+         WITH request
+         OPTIONAL MATCH (request)-[:GENERATES]->(ev:Evidence)
+         RETURN ev ORDER BY ev.createdAt DESC, ev.evidenceId DESC LIMIT 1
+       }
+       WITH agent, request, actionType, resource, customer, approval, ev
+       WHERE $cursorCreatedAt IS NULL
+         OR request.createdAt < $cursorCreatedAt
+         OR (request.createdAt = $cursorCreatedAt AND request.actionRequestId < $cursorId)
+       RETURN request.actionRequestId AS actionRequestId,
+              actionType.actionTypeId AS actionTypeId,
+              actionType.name AS actionTypeName,
+              agent.agentId AS agentId,
+              agent.name AS agentName,
+              request.amount AS amount,
+              request.createdAt AS createdAt,
+              request.status AS status,
+              resource.resourceId AS resourceId,
+              resource.name AS resourceName,
+              customer.customerId AS customerId,
+              customer.name AS customerName,
+              ev.verdict AS latestVerdict,
+              ev.reasonCode AS latestReasonCode,
+              approval.status AS approvalStatus
+       ORDER BY request.createdAt DESC, request.actionRequestId DESC
+       LIMIT toInteger($fetchLimit)`,
+      {
+        cursorCreatedAt: decoded?.c ?? null,
+        cursorId: decoded?.id ?? null,
+        fetchLimit,
+      },
+    );
+
+    const rows = result.records.map((record) => ({
+      actionRequestId: get<string>(record, "actionRequestId"),
+      actionTypeId: get<string>(record, "actionTypeId"),
+      actionTypeName: get<string>(record, "actionTypeName"),
+      agentId: get<string>(record, "agentId"),
+      agentName: get<string>(record, "agentName"),
+      amount: get<number>(record, "amount"),
+      approvalStatus: get<string | null>(record, "approvalStatus") ?? undefined,
+      createdAt: get<string>(record, "createdAt"),
+      customerId: get<string | null>(record, "customerId") ?? undefined,
+      customerName: get<string | null>(record, "customerName") ?? undefined,
+      latestReasonCode: get<string | null>(record, "latestReasonCode") ?? undefined,
+      latestVerdict: get<string | null>(record, "latestVerdict") ?? undefined,
+      resourceId: get<string | null>(record, "resourceId") ?? undefined,
+      resourceName: get<string | null>(record, "resourceName") ?? undefined,
+      status: get<string>(record, "status"),
+    }));
+
+    const hasMore = rows.length > input.limit;
+    const items = hasMore ? rows.slice(0, input.limit) : rows;
+    const lastItem = items[items.length - 1];
+    const nextCursor =
+      hasMore && lastItem
+        ? encodeCursor(lastItem.createdAt, lastItem.actionRequestId)
+        : undefined;
+
+    return { items, nextCursor };
+  } finally {
+    await session.close();
+  }
+}
